@@ -17,10 +17,10 @@
   };
 
   function view(user, years, health) {
-    var html = '<div class="grid-2">';
+    var html = '<div class="columns">';
 
-    html += '<div class="card"><div class="card-header"><h2>👤 Mon profil</h2></div>' +
-      '<div class="card-body"><div class="detail-grid">' +
+    html += '<div class="panel"><div class="panel__head"><h2> Mon profil</h2></div>' +
+      '<div class="panel__body"><div class="record">' +
       item('Identifiant', user.username) +
       item('Nom complet', user.full_name) +
       item('E-mail', user.email) +
@@ -28,17 +28,17 @@
       item('Dernière connexion', UI.dateTime(user.last_login_at)) +
       '</div></div></div>';
 
-    html += '<div class="card"><div class="card-header"><h2>🔑 Changer mon mot de passe</h2></div>' +
-      '<div class="card-body">' +
+    html += '<div class="panel"><div class="panel__head"><h2> Changer mon mot de passe</h2></div>' +
+      '<div class="panel__body">' +
       UI.form([
         { name: 'current_password', label: 'Mot de passe actuel', type: 'password', required: true },
         { name: 'new_password', label: 'Nouveau mot de passe', type: 'password', required: true, help: '8 caractères minimum' },
         { name: 'confirm_password', label: 'Confirmer le nouveau mot de passe', type: 'password', required: true }
       ], 'pwd-form') +
-      '<button class="btn btn-primary" id="pwd-submit">Mettre à jour</button></div></div>';
+      '<button class="btn btn--primary" id="pwd-submit">Mettre à jour</button></div></div>';
 
-    html += '<div class="card"><div class="card-header"><h2>📆 Années scolaires</h2>' +
-      (Api.can('ADMIN') ? '<button class="btn btn-secondary btn-sm" id="year-add">+ Ajouter</button>' : '') +
+    html += '<div class="panel"><div class="panel__head"><h2> Années scolaires</h2>' +
+      (Api.can('ADMIN') ? '<button class="btn btn--sm" id="year-add">+ Ajouter</button>' : '') +
       '</div>' +
       UI.table([
         { key: 'label', label: 'Libellé' },
@@ -46,12 +46,12 @@
         { key: 'end_date', label: 'Fin', render: function (y) { return UI.date(y.end_date); } },
         {
           key: 'is_current', label: 'En cours',
-          render: function (y) { return y.is_current ? UI.badge('Oui', 'badge-success') : '<span class="muted">—</span>'; }
+          render: function (y) { return y.is_current ? UI.tag('Oui', 'good') : '<span class="muted">—</span>'; }
         }
-      ], years, { emptyMessage: 'Aucune année scolaire' }) + '</div>';
+      ], years, { emptyTitle: 'Aucune année scolaire' }) + '</div>';
 
-    html += '<div class="card"><div class="card-header"><h2>🖥 État du serveur</h2></div>' +
-      '<div class="card-body"><div class="detail-grid">' +
+    html += '<div class="panel"><div class="panel__head"><h2> État du serveur</h2></div>' +
+      '<div class="panel__body"><div class="record">' +
       item('API', health ? (health.status || 'ok') : 'injoignable') +
       item('Version', health && health.version ? health.version : '—') +
       item('Base de données', health && health.database ? health.database : 'SQLite') +
@@ -66,8 +66,8 @@
   }
 
   function item(label, value) {
-    return '<div class="detail-item"><div class="label">' + UI.esc(label) + '</div>' +
-      '<div class="value">' + UI.text(value) + '</div></div>';
+    return '<div><p class="record__k">' + UI.esc(label) + '</p>' +
+      '<p class="record__v">' + UI.text(value) + '</p></div>';
   }
 
   function bind(container) {
@@ -104,17 +104,17 @@
       title: 'Nouvelle année scolaire',
       body: UI.form([
         { name: 'label', label: 'Libellé', value: year + '-' + (year + 1), required: true },
-        { name: 'start_date', label: 'Date de début', type: 'date', value: year + '-09-01', col: 'half' },
-        { name: 'end_date', label: 'Date de fin', type: 'date', value: (year + 1) + '-06-30', col: 'half' },
+        { name: 'start_date', label: 'Date de début', type: 'date', value: year + '-09-01', half: true },
+        { name: 'end_date', label: 'Date de fin', type: 'date', value: (year + 1) + '-06-30', half: true },
         {
           name: 'is_current', label: 'Année en cours', type: 'select', value: 'true',
           options: [{ value: 'true', label: 'Oui' }, { value: 'false', label: 'Non' }]
         }
       ], 'year-form'),
       buttons: [
-        { label: 'Annuler', className: 'btn-secondary' },
+        { label: 'Annuler' },
         {
-          label: 'Enregistrer', className: 'btn-primary',
+          label: 'Enregistrer', variant: 'primary',
           onClick: function (button) {
             var form = document.getElementById('year-form');
             var data = UI.readForm(form);

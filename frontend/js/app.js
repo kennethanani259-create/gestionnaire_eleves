@@ -6,17 +6,17 @@
   'use strict';
 
   var ROUTES = {
-    dashboard:  { title: 'Tableau de bord', page: 'dashboard' },
-    students:   { title: 'Élèves',          page: 'students' },
-    student:    { title: 'Fiche élève',     page: 'students', view: 'detail', nav: 'students' },
-    classes:    { title: 'Classes',         page: 'classes' },
-    subjects:   { title: 'Matières',        page: 'subjects' },
-    grades:     { title: 'Notes',           page: 'grades' },
-    attendance: { title: 'Présences',       page: 'attendance' },
-    results:    { title: 'Résultats',       page: 'results' },
-    reports:    { title: 'Rapports & bulletins', page: 'reports' },
-    users:      { title: 'Utilisateurs',    page: 'users', role: 'ADMIN' },
-    settings:   { title: 'Paramètres',      page: 'settings' }
+    dashboard:  { title: "Aujourd'hui", sub: "L'etat du registre en un coup d'oeil", page: 'dashboard' },
+    students:   { title: 'Eleves', sub: 'Inscriptions, coordonnees et affectations', page: 'students' },
+    student:    { title: 'Fiche eleve', page: 'students', view: 'detail', nav: 'students' },
+    classes:    { title: 'Classes', sub: 'Niveaux, effectifs et enseignants principaux', page: 'classes' },
+    subjects:   { title: 'Matieres', sub: 'Codes et coefficients utilises dans les moyennes', page: 'subjects' },
+    grades:     { title: 'Notes', sub: 'Saisie et relecture des evaluations', page: 'grades' },
+    attendance: { title: 'Appel', sub: 'Presences, absences, retards et justifications', page: 'attendance' },
+    results:    { title: 'Resultats', sub: 'Moyennes ponderees et classement par classe', page: 'results' },
+    reports:    { title: 'Bulletins et rapports', sub: 'Documents PDF, exports et imports', page: 'reports' },
+    users:      { title: 'Comptes', sub: 'Acces et roles', page: 'users', role: 'ADMIN' },
+    settings:   { title: 'Reglages', sub: 'Profil, annee scolaire et etat du service', page: 'settings' }
   };
 
   var App = {
@@ -41,17 +41,17 @@
 
     /* ----------------------------- Écrans ----------------------------- */
     showLogin: function (message) {
-      document.getElementById('app').classList.add('hidden');
-      document.getElementById('login-screen').classList.remove('hidden');
+      document.getElementById('app').hidden = true;
+      document.getElementById('login-screen').hidden = false;
       var box = document.getElementById('login-error');
-      if (message) { box.textContent = message; box.classList.remove('hidden'); }
-      else { box.classList.add('hidden'); }
+      if (message) { box.textContent = message; box.hidden = false; }
+      else { box.hidden = true; }
       document.getElementById('login-password').value = '';
     },
 
     showApp: function () {
-      document.getElementById('login-screen').classList.add('hidden');
-      document.getElementById('app').classList.remove('hidden');
+      document.getElementById('login-screen').hidden = true;
+      document.getElementById('app').hidden = false;
 
       var user = Api.user() || {};
       document.getElementById('user-name').textContent = user.full_name || user.username || '—';
@@ -59,8 +59,8 @@
       document.getElementById('user-initials').textContent = initials(user);
 
       // Les entrées réservées à l'administrateur sont masquées pour les autres.
-      document.querySelectorAll('.admin-only').forEach(function (el) {
-        el.classList.toggle('hidden', !Api.can('ADMIN'));
+      document.querySelectorAll('.is-admin').forEach(function (el) {
+        el.hidden = !Api.can('ADMIN');
       });
 
       App.cache = {};
@@ -96,19 +96,23 @@
       }
 
       document.getElementById('page-title').textContent = route.title;
+      document.getElementById('page-sub').textContent = route.sub || '';
       document.getElementById('page-actions').innerHTML = '';
-      document.getElementById('sidebar').classList.remove('open');
+      closeRail();
 
       var navKey = route.nav || target.name;
-      document.querySelectorAll('.nav-item').forEach(function (el) {
-        el.classList.toggle('active', el.dataset.nav === navKey);
+      document.querySelectorAll('.rail__item').forEach(function (el) {
+        var active = el.dataset.nav === navKey;
+        el.classList.toggle('is-active', active);
+        if (active) el.setAttribute('aria-current', 'page');
+        else el.removeAttribute('aria-current');
       });
 
       var content = document.getElementById('page-content');
-      content.innerHTML = UI.spinner();
+      content.innerHTML = UI.loading();
 
       var module = global.Pages[route.page];
-      if (!module) { content.innerHTML = UI.empty('Page introuvable'); return; }
+      if (!module) { content.innerHTML = UI.blank('Page introuvable', "Cette adresse ne correspond a aucune section."); return; }
 
       Promise.resolve()
         .then(function () {
@@ -117,8 +121,9 @@
             : module.render(content, target.params);
         })
         .catch(function (err) {
-          content.innerHTML = '<div class="alert alert-error">' +
-            UI.esc(err && err.message ? err.message : 'Erreur de chargement') + '</div>';
+          content.innerHTML = '<p class="notice notice--error">' +
+            UI.esc(err && err.message ? err.message : 'Erreur de chargement') +
+            '</p><button class="btn" onclick="App.reload()">Reessayer</button>';
         });
     },
 
@@ -126,10 +131,11 @@
     reload: function () { App.route(); },
 
     /** Ajoute un bouton dans la barre supérieure. */
-    action: function (label, onClick, className) {
+    action: function (label, onClick, options) {
+      options = options || {};
       var btn = document.createElement('button');
-      btn.className = 'btn ' + (className || 'btn-primary');
-      btn.textContent = label;
+      btn.className = 'btn' + (options.variant ? ' btn--' + options.variant : '');
+      btn.innerHTML = (options.icon ? UI.icon(options.icon) : '') + '<span>' + UI.esc(label) + '</span>';
       btn.onclick = onClick;
       document.getElementById('page-actions').appendChild(btn);
       return btn;
@@ -170,9 +176,9 @@
       event.preventDefault();
       var button = document.getElementById('login-submit');
       var box = document.getElementById('login-error');
-      box.classList.add('hidden');
+      box.hidden = true;
       button.disabled = true;
-      button.textContent = 'Connexion…';
+      button.textContent = 'Ouverture…';
 
       Api.login(document.getElementById('login-username').value.trim(),
                 document.getElementById('login-password').value)
@@ -183,29 +189,53 @@
         })
         .catch(function (err) {
           box.textContent = err.message || 'Connexion impossible';
-          box.classList.remove('hidden');
+          box.hidden = false;
+          document.getElementById('login-password').focus();
         })
         .then(function () {
           button.disabled = false;
-          button.textContent = 'Se connecter';
+          button.textContent = 'Entrer';
         });
     });
   }
 
   function bindShell() {
     document.getElementById('logout-btn').onclick = function () {
-      UI.confirm('Déconnexion', 'Voulez-vous vraiment vous déconnecter ?', App.logout);
+      UI.confirm('Fermer la session',
+        'Vous devrez saisir a nouveau votre mot de passe pour rouvrir le registre.',
+        App.logout, 'Fermer la session');
     };
+
     document.getElementById('menu-toggle').onclick = function () {
-      document.getElementById('sidebar').classList.toggle('open');
+      var rail = document.getElementById('sidebar');
+      var open = rail.classList.toggle('is-open');
+      this.setAttribute('aria-expanded', open ? 'true' : 'false');
     };
     document.getElementById('modal-close').onclick = UI.closeModal;
     document.getElementById('modal-backdrop').addEventListener('click', function (event) {
       if (event.target === this) UI.closeModal();
     });
     document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape') UI.closeModal();
+      if (event.key !== 'Escape') return;
+      if (!document.getElementById('modal-backdrop').hidden) UI.closeModal();
+      else closeRail();
     });
+
+    // Tri des tableaux au clavier : l'en-tete se comporte comme un bouton.
+    document.getElementById('page-content').addEventListener('keydown', function (event) {
+      if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('th[data-sort]')) {
+        event.preventDefault();
+        event.target.click();
+      }
+    });
+  }
+
+  function closeRail() {
+    var rail = document.getElementById('sidebar');
+    if (!rail) return;
+    rail.classList.remove('is-open');
+    var toggle = document.getElementById('menu-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
   }
 
   function initials(user) {

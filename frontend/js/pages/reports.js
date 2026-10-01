@@ -19,47 +19,47 @@
     var termOptions = '<option value="">Année complète</option>' +
       [1, 2, 3].map(function (t) { return '<option value="' + t + '">Trimestre ' + t + '</option>'; }).join('');
 
-    var html = '<div class="grid-2">';
+    var html = '<div class="columns">';
 
     /* --- Bulletin individuel --- */
-    html += block('📄 Bulletin d\'un élève',
+    html += block('Bulletin d\'un élève',
       'Génère le bulletin PDF d\'un élève : moyennes par matière, moyenne générale pondérée, ' +
       'rang dans la classe, appréciation et bilan des absences.',
       '<div class="field"><label>Rechercher un élève</label>' +
       '<input type="search" id="rep-student-q" placeholder="Nom, prénom ou matricule…"></div>' +
       '<div class="field"><label>Élève</label><select id="rep-student"><option value="">—</option></select></div>' +
       '<div class="field"><label>Période</label><select id="rep-student-term">' + termOptions + '</select></div>' +
-      '<button class="btn btn-primary btn-block" id="rep-student-go">Télécharger le bulletin</button>');
+      '<button class="btn btn--primary btn--full" id="rep-student-go">Télécharger le bulletin</button>');
 
     /* --- Rapport de classe --- */
-    html += block('🏫 Rapport de classe',
+    html += block('Rapport de classe',
       'Rapport PDF complet d\'une classe : effectif, moyenne générale, classement des élèves ' +
       'et statistiques par matière.',
       '<div class="field"><label>Classe</label><select id="rep-class">' + classOptions + '</select></div>' +
       '<div class="field"><label>Période</label><select id="rep-class-term">' + termOptions + '</select></div>' +
-      '<button class="btn btn-primary btn-block" id="rep-class-go">Télécharger le rapport</button>');
+      '<button class="btn btn--primary btn--full" id="rep-class-go">Télécharger le rapport</button>');
 
     /* --- Exports --- */
-    html += block('📤 Exporter les données',
+    html += block('Exporter les données',
       'Exporte les données au format CSV (tableur) ou JSON (sauvegarde / migration).',
       '<div class="field"><label>Classe (facultatif)</label>' +
       '<select id="rep-export-class"><option value="">Toutes les classes</option>' + classOptions + '</select></div>' +
       '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
-      '<button class="btn btn-secondary" data-export="students-csv">Élèves (CSV)</button>' +
-      '<button class="btn btn-secondary" data-export="students-json">Élèves (JSON)</button>' +
-      '<button class="btn btn-secondary" data-export="grades-csv">Notes (CSV)</button>' +
+      '<button class="btn" data-export="students-csv">Élèves (CSV)</button>' +
+      '<button class="btn" data-export="students-json">Élèves (JSON)</button>' +
+      '<button class="btn" data-export="grades-csv">Notes (CSV)</button>' +
       '</div>');
 
     /* --- Imports --- */
     if (Api.can('ADMIN')) {
-      html += block('📥 Importer des élèves',
+      html += block('Importer des élèves',
         'Importe un fichier CSV ou JSON. Chaque ligne invalide est signalée avec son numéro, ' +
         'les lignes valides sont enregistrées.',
         '<div class="field"><label>Classe de destination (facultatif)</label>' +
         '<select id="rep-import-class"><option value="">— Aucune —</option>' + classOptions + '</select></div>' +
         '<div class="field"><label>Fichier (.csv ou .json)</label>' +
         '<input type="file" id="rep-import-file" accept=".csv,.json"></div>' +
-        '<button class="btn btn-primary btn-block" id="rep-import-go">Importer</button>' +
+        '<button class="btn btn--primary btn--full" id="rep-import-go">Importer</button>' +
         '<div id="rep-import-result"></div>');
     }
 
@@ -68,20 +68,20 @@
     /* --- Catalogue des rapports exposés par l'API --- */
     var available = (catalog && catalog.reports) || [];
     if (available.length) {
-      html += '<div class="card"><div class="card-header"><h2>Rapports disponibles via l\'API</h2></div>' +
+      html += '<div class="panel"><div class="panel__head"><h2>Rapports disponibles via l\'API</h2></div>' +
         UI.table([
           { key: 'name', label: 'Rapport', render: function (r) { return UI.text(r.name || r.id); } },
           { key: 'description', label: 'Description', render: function (r) { return UI.text(r.description); } },
-          { key: 'url', label: 'Point d\'entrée', className: 'mono', render: function (r) { return UI.text(r.url); } }
-        ], available, { emptyMessage: 'Aucun rapport' }) + '</div>';
+          { key: 'url', label: 'Point d\'entrée', cls: 'mono', render: function (r) { return UI.text(r.url); } }
+        ], available, { emptyTitle: 'Aucun rapport' }) + '</div>';
     }
 
     return html;
   }
 
   function block(title, description, body) {
-    return '<div class="card"><div class="card-header"><h2>' + UI.esc(title) + '</h2></div>' +
-      '<div class="card-body"><p class="muted" style="margin-bottom:14px">' + UI.esc(description) + '</p>' +
+    return '<div class="panel"><div class="panel__head"><h2>' + UI.esc(title) + '</h2></div>' +
+      '<div class="panel__body"><p class="muted" style="margin-bottom:14px">' + UI.esc(description) + '</p>' +
       body + '</div></div>';
   }
 
@@ -186,7 +186,7 @@
       '</strong> ignoré(s), <strong>' + report.error_count + '</strong> erreur(s).</div>';
     if (report.errors && report.errors.length) {
       html += UI.table([
-        { key: 'line', label: 'Ligne', className: 'mono' },
+        { key: 'line', label: 'Ligne', cls: 'mono' },
         { key: 'message', label: 'Erreur' }
       ], report.errors, {});
     }

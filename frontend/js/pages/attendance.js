@@ -14,7 +14,7 @@
 
   global.Pages.attendance = {
     render: function (container) {
-      if (Api.can('TEACHER')) App.action('✅ Faire l\'appel', openRollCall);
+      if (Api.can('TEACHER')) App.action('Faire l\'appel', openRollCall);
 
       return Promise.all([
         App.classes(),
@@ -37,32 +37,33 @@
     var total = entries.length;
     var rate = total ? ((counts.PRESENT + counts.LATE) / total) * 100 : null;
 
-    var html = '<div class="toolbar">' +
+    var html = '<div class="filters">' +
       '<select id="a-class"><option value="">Toutes les classes</option>' +
       classes.map(function (c) {
-        return '<option value="' + c.id + '"' + (String(c.id) === String(state.classId) ? ' selected' : '') +
+        return '<option value="' + c.id + '"' + (String(c.id) === String(state.classId) ? 'selected' : '') +
           '>' + UI.esc(c.name) + '</option>';
       }).join('') + '</select>' +
       '<select id="a-status"><option value="">Tous les statuts</option>' +
       STATUSES.map(function (s) {
-        return '<option value="' + s.value + '"' + (s.value === state.status ? ' selected' : '') +
+        return '<option value="' + s.value + '"' + (s.value === state.status ? 'selected' : '') +
           '>' + UI.esc(s.label) + '</option>';
       }).join('') + '</select>' +
       '<label class="muted">Du</label><input type="date" id="a-from" value="' + UI.esc(state.from) + '">' +
       '<label class="muted">au</label><input type="date" id="a-to" value="' + UI.esc(state.to) + '">' +
-      '<button class="btn btn-ghost" id="a-reset">Réinitialiser</button>' +
+      '<button class="btn btn--ghost" id="a-reset">Réinitialiser</button>' +
       '</div>';
 
-    html += '<div class="stats-grid">' +
-      stat('✅', counts.PRESENT, 'Présents') +
-      stat('🚫', counts.ABSENT, 'Absents') +
-      stat('📝', counts.EXCUSED, 'Absences justifiées') +
-      stat('⏰', counts.LATE, 'Retards') +
-      stat('📊', UI.num(rate, 1) + ' %', 'Taux de présence') +
-      '</div>';
+    html += UI.readings([
+      { value: counts.PRESENT, label: 'Présents', tone: 'good' },
+      { value: counts.ABSENT, label: 'Absents', tone: counts.ABSENT ? 'alert' : null },
+      { value: counts.EXCUSED, label: 'Absences justifiées' },
+      { value: counts.LATE, label: 'Retards' },
+      { value: UI.num(rate, 1), unit: '%', label: 'Taux de présence',
+        tone: rate >= 90 ? 'good' : 'alert', note: total + ' relevé(s)' }
+    ]);
 
-    html += '<div class="grid-2"><div class="card">' +
-      '<div class="card-header"><h2>Répartition des relevés</h2></div><div class="card-body">' +
+    html += '<div class="columns"><div class="panel">' +
+      '<div class="panel__head"><h2>Répartition des relevés</h2></div><div class="panel__body">' +
       Charts.donut([
         { label: 'Présents', value: counts.PRESENT, color: '#16a34a' },
         { label: 'Absents', value: counts.ABSENT, color: '#dc2626' },
@@ -70,7 +71,7 @@
         { label: 'Retards', value: counts.LATE, color: '#2563eb' }
       ], { centerLabel: 'relevés' }) + '</div></div>';
 
-    html += '<div class="card"><div class="card-header"><h2>Relevés par jour</h2></div><div class="card-body">' +
+    html += '<div class="panel"><div class="panel__head"><h2>Relevés par jour</h2></div><div class="panel__body">' +
       Charts.bar(absencesByDay(entries), { color: '#dc2626', integer: true }) + '</div></div></div>';
 
     var columns = [
@@ -83,23 +84,23 @@
       { key: 'subject_name', label: 'Matière', render: function (e) { return UI.text(e.subject_name); } },
       {
         key: 'status', label: 'Statut',
-        render: function (e) { return UI.badge(e.status_label || e.status, UI.ATTENDANCE_BADGE[e.status]); }
+        render: function (e) { return UI.tag(e.status_label || e.status, UI.ATTENDANCE_TAG[e.status]); }
       },
       { key: 'justification', label: 'Justification', render: function (e) { return UI.text(e.justification); } }
     ];
     if (Api.can('TEACHER')) {
       columns.push({
-        key: 'actions', label: '', className: 'text-right',
+        key: 'actions', label: '', cls: 't-right',
         render: function (e) {
           return '<div class="row-actions">' +
-            '<button class="btn btn-secondary btn-sm" data-edit="' + e.id + '">✏️</button>' +
-            '<button class="btn btn-danger btn-sm" data-del="' + e.id + '">🗑</button></div>';
+            '<button class="btn btn--sm" data-edit="' + e.id + '">' + UI.icon('edit') + '</button>' +
+            '<button class="btn btn--danger btn--sm" data-del="' + e.id + '">' + UI.icon('trash') + '</button></div>';
         }
       });
     }
 
-    return html + '<div class="card"><div class="card-header"><h2>Historique</h2></div>' +
-      UI.table(columns, entries, { emptyMessage: 'Aucun relevé de présence' }) + '</div>';
+    return html + '<div class="panel"><div class="panel__head"><h2>Historique</h2></div>' +
+      UI.table(columns, entries, { emptyTitle: 'Aucun relevé de présence' }) + '</div>';
   }
 
   function absencesByDay(entries) {
@@ -112,12 +113,6 @@
     return Object.keys(map).sort().slice(-12).map(function (day) {
       return { label: day.substring(8) + '/' + day.substring(5, 7), value: map[day] };
     });
-  }
-
-  function stat(icon, value, label) {
-    return '<div class="stat-card"><div class="stat-icon">' + icon + '</div><div>' +
-      '<div class="stat-value">' + UI.esc(value) + '</div>' +
-      '<div class="stat-label">' + UI.esc(label) + '</div></div></div>';
   }
 
   function bind(container, entries) {
@@ -138,7 +133,7 @@
       btn.onclick = function () {
         var e = find(btn.dataset.del);
         UI.confirm('Supprimer le relevé',
-          'Supprimer le relevé du ' + UI.date(e.date) + ' pour ' + (e.student_name || '') + ' ?',
+          'Supprimer le relevé du ' + UI.date(e.date) + 'pour ' + (e.student_name || '') + ' ?',
           function () {
             Api.del('/api/attendance/' + e.id).then(function () {
               UI.success('Relevé supprimé.');
@@ -153,16 +148,16 @@
     UI.modal({
       title: 'Modifier le relevé',
       body: UI.form([
-        { name: 'date', label: 'Date', type: 'date', value: String(entry.date).substring(0, 10), required: true, col: 'half' },
-        { name: 'time', label: 'Heure', type: 'time', value: entry.time, col: 'half' },
+        { name: 'date', label: 'Date', type: 'date', value: String(entry.date).substring(0, 10), required: true, half: true },
+        { name: 'time', label: 'Heure', type: 'time', value: entry.time, half: true },
         { name: 'status', label: 'Statut', type: 'select', value: entry.status, options: STATUSES },
         { name: 'justification', label: 'Justification', type: 'textarea', value: entry.justification, rows: 2 },
         { name: 'comment', label: 'Commentaire', type: 'textarea', value: entry.comment, rows: 2 }
       ], 'att-form'),
       buttons: [
-        { label: 'Annuler', className: 'btn-secondary' },
+        { label: 'Annuler' },
         {
-          label: 'Enregistrer', className: 'btn-primary',
+          label: 'Enregistrer', variant: 'primary',
           onClick: function (button) {
             var form = document.getElementById('att-form');
             var data = UI.readForm(form);
@@ -201,10 +196,10 @@
           '<div class="field"><label>Date *</label><input type="date" id="rc-date" value="' +
           new Date().toISOString().substring(0, 10) + '"></div></div>' +
           '<div class="field"><label>Heure</label><input type="time" id="rc-time"></div>' +
-          '<div id="rc-list">' + UI.spinner() + '</div>',
+          '<div id="rc-list">' + UI.loading() + '</div>',
         buttons: [
-          { label: 'Annuler', className: 'btn-secondary' },
-          { label: 'Enregistrer l\'appel', className: 'btn-primary', onClick: submitRollCall }
+          { label: 'Annuler' },
+          { label: 'Enregistrer l\'appel', variant: 'primary', onClick: submitRollCall }
         ],
         onOpen: function () {
           var select = document.getElementById('rc-class');
@@ -217,25 +212,25 @@
 
   function loadRoll(classId) {
     var host = document.getElementById('rc-list');
-    host.innerHTML = UI.spinner();
+    host.innerHTML = UI.loading();
     Api.get('/api/classes/' + classId + '/students?active_only=true').then(function (data) {
       var students = data.items || [];
       if (!students.length) {
-        host.innerHTML = UI.empty('Cette classe ne contient aucun élève actif');
+        host.innerHTML = UI.blank('Cette classe ne contient aucun élève actif');
         return;
       }
-      host.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Élève</th>' +
-        STATUSES.map(function (s) { return '<th class="text-center">' + UI.esc(s.label) + '</th>'; }).join('') +
+      host.innerHTML = '<div class="table-scroll"><table><thead><tr><th>Élève</th>' +
+        STATUSES.map(function (s) { return '<th class="t-center">' + UI.esc(s.label) + '</th>'; }).join('') +
         '</tr></thead><tbody>' +
         students.map(function (s) {
           return '<tr><td>' + UI.esc(s.full_name) + '</td>' +
             STATUSES.map(function (st) {
-              return '<td class="text-center"><input type="radio" style="width:auto" name="rc-' + s.id +
-                '" value="' + st.value + '"' + (st.value === 'PRESENT' ? ' checked' : '') + '></td>';
+              return '<td class="t-center"><input type="radio" style="width:auto" name="rc-' + s.id +
+                '" value="' + st.value + '"' + (st.value === 'PRESENT' ? 'checked' : '') + '></td>';
             }).join('') + '</tr>';
         }).join('') + '</tbody></table></div>';
     }).catch(function (err) {
-      host.innerHTML = '<div class="alert alert-error">' + UI.esc(err.message) + '</div>';
+      host.innerHTML = '<div class="notice notice--error">' + UI.esc(err.message) + '</div>';
     });
   }
 
@@ -254,7 +249,7 @@
       class_id: classId, date: date, time: time || null, entries: entries
     }).then(function (result) {
       UI.closeModal();
-      UI.success(result.created + ' relevé(s) enregistré(s).');
+      UI.success(result.created + 'relevé(s) enregistré(s).');
       App.reload();
     }).catch(function (err) { button.disabled = false; UI.showError(err); });
   }

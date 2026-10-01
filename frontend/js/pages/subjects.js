@@ -9,7 +9,7 @@
     render: function (container) {
       if (Api.can('ADMIN')) {
         App.action('+ Nouvelle matière', function () { openForm(null); });
-        App.action('Gérer les enseignants', openTeachers, 'btn-secondary');
+        App.action('Gérer les enseignants', openTeachers);
       }
       return Promise.all([
         App.classes(),
@@ -23,36 +23,36 @@
   };
 
   function view(classes, subjects) {
-    var html = '<div class="toolbar"><select id="s-class" style="min-width:220px">' +
+    var html = '<div class="filters"><select id="s-class" style="min-width:220px">' +
       '<option value="">Toutes les classes</option>' +
       classes.map(function (c) {
-        return '<option value="' + c.id + '"' + (String(c.id) === String(state.classId) ? ' selected' : '') +
+        return '<option value="' + c.id + '"' + (String(c.id) === String(state.classId) ? 'selected' : '') +
           '>' + UI.esc(c.name) + '</option>';
       }).join('') + '</select></div>';
 
     var columns = [
-      { key: 'code', label: 'Code', className: 'mono' },
-      { key: 'name', label: 'Matière', render: function (s) { return '<span class="strong">' + UI.esc(s.name) + '</span>'; } },
+      { key: 'code', label: 'Code', cls: 'mono' },
+      { key: 'name', label: 'Matière', render: function (s) { return '<span class="name">' + UI.esc(s.name) + '</span>'; } },
       { key: 'class_name', label: 'Classe', render: function (s) { return UI.text(s.class_name); } },
       {
-        key: 'coefficient', label: 'Coefficient', className: 'text-center',
-        render: function (s) { return UI.badge('× ' + UI.num(s.coefficient, 1), 'badge-primary'); }
+        key: 'coefficient', label: 'Coefficient', cls: 't-center',
+        render: function (s) { return UI.tag('× ' + UI.num(s.coefficient, 1), 'mark'); }
       },
       { key: 'teacher_name', label: 'Enseignant', render: function (s) { return UI.text(s.teacher_name); } }
     ];
     if (Api.can('ADMIN')) {
       columns.push({
-        key: 'actions', label: '', className: 'text-right',
+        key: 'actions', label: '', cls: 't-right',
         render: function (s) {
           return '<div class="row-actions">' +
-            '<button class="btn btn-secondary btn-sm" data-edit="' + s.id + '">✏️</button>' +
-            '<button class="btn btn-danger btn-sm" data-del="' + s.id + '">🗑</button></div>';
+            '<button class="btn btn--sm" data-edit="' + s.id + '">' + UI.icon('edit') + '</button>' +
+            '<button class="btn btn--danger btn--sm" data-del="' + s.id + '">' + UI.icon('trash') + '</button></div>';
         }
       });
     }
 
-    return html + '<div class="card">' +
-      UI.table(columns, subjects, { emptyMessage: 'Aucune matière enregistrée' }) + '</div>';
+    return html + '<div class="panel">' +
+      UI.table(columns, subjects, { emptyTitle: 'Aucune matière enregistrée' }) + '</div>';
   }
 
   function bind(container, subjects) {
@@ -85,15 +85,15 @@
     Promise.all([App.classes(), App.teachers()]).then(function (r) {
       var classes = r[0], teachers = r[1], s = subject || {};
       var fields = [
-        { name: 'name', label: 'Nom', value: s.name, required: true, col: 'half', placeholder: 'Mathématiques' },
-        { name: 'code', label: 'Code', value: s.code, required: true, col: 'half', placeholder: 'MATH' },
+        { name: 'name', label: 'Nom', value: s.name, required: true, half: true, placeholder: 'Mathématiques' },
+        { name: 'code', label: 'Code', value: s.code, required: true, half: true, placeholder: 'MATH' },
         {
-          name: 'class_id', label: 'Classe', type: 'select', value: s.class_id || state.classId, col: 'half',
+          name: 'class_id', label: 'Classe', type: 'select', value: s.class_id || state.classId, half: true,
           options: classes.map(function (c) { return { value: c.id, label: c.name + ' — ' + c.level }; })
         },
         {
           name: 'coefficient', label: 'Coefficient', type: 'number', step: '0.5', min: 0.5,
-          value: s.coefficient === undefined ? 1 : s.coefficient, col: 'half'
+          value: s.coefficient === undefined ? 1 : s.coefficient, half: true
         },
         {
           name: 'teacher_id', label: 'Enseignant', type: 'select', value: s.teacher_id,
@@ -107,9 +107,9 @@
         title: subject ? 'Modifier la matière' : 'Nouvelle matière',
         body: UI.form(fields, 'subject-form'),
         buttons: [
-          { label: 'Annuler', className: 'btn-secondary' },
+          { label: 'Annuler' },
           {
-            label: 'Enregistrer', className: 'btn-primary',
+            label: 'Enregistrer', variant: 'primary',
             onClick: function (button) {
               var form = document.getElementById('subject-form');
               var data = UI.readForm(form);
@@ -150,10 +150,10 @@
           { key: 'speciality', label: 'Spécialité', render: function (t) { return UI.text(t.speciality); } },
           { key: 'email', label: 'E-mail', render: function (t) { return UI.text(t.email); } },
           { key: 'phone', label: 'Téléphone', render: function (t) { return UI.text(t.phone); } }
-        ], teachers, { emptyMessage: 'Aucun enseignant enregistré' }),
+        ], teachers, { emptyTitle: 'Aucun enseignant enregistré' }),
         buttons: [
-          { label: 'Fermer', className: 'btn-secondary' },
-          { label: '+ Ajouter', className: 'btn-primary', onClick: openTeacherForm }
+          { label: 'Fermer' },
+          { label: '+ Ajouter', variant: 'primary', onClick: openTeacherForm }
         ]
       });
     }).catch(UI.showError);
@@ -163,16 +163,16 @@
     UI.modal({
       title: 'Nouvel enseignant',
       body: UI.form([
-        { name: 'last_name', label: 'Nom', required: true, col: 'half' },
-        { name: 'first_name', label: 'Prénom', required: true, col: 'half' },
-        { name: 'speciality', label: 'Spécialité', col: 'half' },
-        { name: 'phone', label: 'Téléphone', col: 'half' },
+        { name: 'last_name', label: 'Nom', required: true, half: true },
+        { name: 'first_name', label: 'Prénom', required: true, half: true },
+        { name: 'speciality', label: 'Spécialité', half: true },
+        { name: 'phone', label: 'Téléphone', half: true },
         { name: 'email', label: 'E-mail', type: 'email' }
       ], 'teacher-form'),
       buttons: [
-        { label: 'Annuler', className: 'btn-secondary' },
+        { label: 'Annuler' },
         {
-          label: 'Enregistrer', className: 'btn-primary',
+          label: 'Enregistrer', variant: 'primary',
           onClick: function (button) {
             var form = document.getElementById('teacher-form');
             button.disabled = true;

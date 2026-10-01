@@ -21,7 +21,7 @@
       App.action('Exporter CSV', function () {
         Api.download('/api/export/grades.csv' + Api.qs({ class_id: state.classId, term: state.term }), 'notes.csv')
           .then(function () { UI.success('Export téléchargé.'); }).catch(UI.showError);
-      }, 'btn-secondary');
+      });
 
       return Promise.all([
         App.classes(), App.subjects(),
@@ -44,7 +44,7 @@
       ? subjects.filter(function (s) { return String(s.class_id) === String(state.classId); })
       : subjects;
 
-    var html = '<div class="toolbar">' +
+    var html = '<div class="filters">' +
       sel('g-class', 'Toutes les classes', classes.map(function (c) {
         return { value: c.id, label: c.name };
       }), state.classId) +
@@ -53,7 +53,7 @@
       }), state.subjectId) +
       sel('g-term', 'Tous les trimestres', TERMS, state.term) +
       sel('g-type', 'Tous les types', EVAL_TYPES, state.evalType) +
-      '<button class="btn btn-ghost" id="g-reset">Réinitialiser</button>' +
+      '<button class="btn btn--ghost" id="g-reset">Réinitialiser</button>' +
       '</div>';
 
     var columns = [
@@ -67,26 +67,26 @@
       { key: 'subject_name', label: 'Matière', render: function (g) { return UI.text(g.subject_name); } },
       {
         key: 'eval_type', label: 'Type',
-        render: function (g) { return UI.badge(g.eval_type_label || g.eval_type, 'badge-neutral'); }
+        render: function (g) { return UI.tag(g.eval_type_label || g.eval_type, 'neutral'); }
       },
-      { key: 'term', label: 'Trim.', className: 'text-center' },
+      { key: 'term', label: 'Trim.', cls: 't-center' },
       {
-        key: 'score', label: 'Note', className: 'text-right',
+        key: 'score', label: 'Note', cls: 't-right',
         render: function (g) {
-          return '<span class="strong">' + UI.num(g.score) + '</span> <span class="muted">/ ' +
+          return '<span class="name">' + UI.num(g.score) + '</span> <span class="muted">/ ' +
             UI.num(g.max_score, 0) + '</span>';
         }
       },
-      { key: 'score_20', label: 'Sur 20', className: 'text-right', render: function (g) { return UI.avg(g.score_20); } },
+      { key: 'score_20', label: 'Sur 20', cls: 't-right', render: function (g) { return UI.score(g.score_20); } },
       { key: 'comment', label: 'Commentaire', render: function (g) { return UI.text(g.comment); } }
     ];
     if (Api.can('TEACHER')) {
       columns.push({
-        key: 'actions', label: '', className: 'text-right',
+        key: 'actions', label: '', cls: 't-right',
         render: function (g) {
           return '<div class="row-actions">' +
-            '<button class="btn btn-secondary btn-sm" data-edit="' + g.id + '">✏️</button>' +
-            '<button class="btn btn-danger btn-sm" data-del="' + g.id + '">🗑</button></div>';
+            '<button class="btn btn--sm" data-edit="' + g.id + '">' + UI.icon('edit') + '</button>' +
+            '<button class="btn btn--danger btn--sm" data-del="' + g.id + '">' + UI.icon('trash') + '</button></div>';
         }
       });
     }
@@ -95,22 +95,23 @@
       ? grades.reduce(function (sum, g) { return sum + Number(g.score_20 || 0); }, 0) / grades.length
       : null;
 
-    html += '<div class="stats-grid">' +
-      '<div class="stat-card"><div class="stat-icon">✍️</div><div><div class="stat-value">' +
-      grades.length + '</div><div class="stat-label">Notes affichées</div></div></div>' +
-      '<div class="stat-card"><div class="stat-icon">📊</div><div><div class="stat-value">' +
-      UI.num(average) + '</div><div class="stat-label">Moyenne des notes affichées</div></div></div>' +
-      '</div>';
+    html += UI.readings([
+      { value: grades.length, label: 'Notes affichées',
+        note: grades.length >= 200 ? 'affichage limité à 200' : null },
+      { value: UI.num(average), unit: '/20', label: 'Moyenne de la sélection',
+        tone: average === null ? null : (average >= 10 ? 'good' : 'alert'),
+        note: 'moyenne simple, sans coefficient' }
+    ]);
 
-    return html + '<div class="card">' +
-      UI.table(columns, grades, { emptyMessage: 'Aucune note ne correspond aux filtres' }) + '</div>';
+    return html + '<div class="panel">' +
+      UI.table(columns, grades, { emptyTitle: 'Aucune note ne correspond aux filtres' }) + '</div>';
   }
 
   function sel(id, placeholder, options, value) {
     return '<select id="' + id + '"><option value="">' + UI.esc(placeholder) + '</option>' +
       options.map(function (o) {
         return '<option value="' + UI.esc(o.value) + '"' +
-          (String(o.value) === String(value) ? ' selected' : '') + '>' + UI.esc(o.label) + '</option>';
+          (String(o.value) === String(value) ? 'selected' : '') + '>' + UI.esc(o.label) + '</option>';
       }).join('') + '</select>';
   }
 
@@ -134,7 +135,7 @@
       btn.onclick = function () {
         var g = find(btn.dataset.del);
         UI.confirm('Supprimer la note',
-          'Supprimer la note de ' + (g.student_name || '') + ' en ' + (g.subject_name || '') + ' ?',
+          'Supprimer la note de ' + (g.student_name || '') + 'en ' + (g.subject_name || '') + ' ?',
           function () {
             Api.del('/api/grades/' + g.id).then(function () {
               UI.success('Note supprimée.');
@@ -166,10 +167,10 @@
             return { value: s.id, label: s.name + (s.class_name ? ' (' + s.class_name + ')' : '') };
           })
         },
-        { name: 'eval_type', label: 'Type d\'évaluation', type: 'select', value: g.eval_type || 'HOMEWORK', options: EVAL_TYPES, col: 'half' },
-        { name: 'term', label: 'Trimestre', type: 'select', value: g.term || 1, options: TERMS, col: 'half' },
-        { name: 'score', label: 'Note obtenue', type: 'number', step: '0.25', min: 0, value: g.score, required: true, col: 'half' },
-        { name: 'max_score', label: 'Barème', type: 'number', step: '0.5', min: 1, value: g.max_score === undefined ? 20 : g.max_score, required: true, col: 'half' },
+        { name: 'eval_type', label: 'Type d\'évaluation', type: 'select', value: g.eval_type || 'HOMEWORK', options: EVAL_TYPES, half: true },
+        { name: 'term', label: 'Trimestre', type: 'select', value: g.term || 1, options: TERMS, half: true },
+        { name: 'score', label: 'Note obtenue', type: 'number', step: '0.25', min: 0, value: g.score, required: true, half: true },
+        { name: 'max_score', label: 'Barème', type: 'number', step: '0.5', min: 1, value: g.max_score === undefined ? 20 : g.max_score, required: true, half: true },
         { name: 'eval_date', label: 'Date de l\'évaluation', type: 'date', value: g.eval_date || today() },
         { name: 'comment', label: 'Commentaire', type: 'textarea', value: g.comment, rows: 2 }
       ];
@@ -177,7 +178,7 @@
       if (!students.length) {
         UI.modal({
           title: 'Saisir une note',
-          body: '<div class="alert alert-warning">Aucun élève disponible. Créez d\'abord des élèves.</div>',
+          body: '<div class="notice notice--warn">Aucun élève disponible. Créez d\'abord des élèves.</div>',
           buttons: [{ label: 'Fermer' }]
         });
         return;
@@ -187,9 +188,9 @@
         title: grade ? 'Modifier la note' : 'Saisir une note',
         body: UI.form(fields, 'grade-form'),
         buttons: [
-          { label: 'Annuler', className: 'btn-secondary' },
+          { label: 'Annuler' },
           {
-            label: 'Enregistrer', className: 'btn-primary',
+            label: 'Enregistrer', variant: 'primary',
             onClick: function (button) {
               var form = document.getElementById('grade-form');
               var data = UI.readForm(form);

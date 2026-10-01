@@ -3,101 +3,190 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gestionnaire d'élèves</title>
-  <link rel="stylesheet" href="/css/styles.css?v=3">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>">
+  <title>Registre — gestion des élèves</title>
+  <meta name="description" content="Tenue du registre scolaire : élèves, notes, présences, bulletins.">
+  <link rel="stylesheet" href="/css/styles.css?v=4">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='3' fill='%231d2e27'/><path d='M9 7h11a4 4 0 0 1 4 4v14H13a4 4 0 0 0-4 4z' fill='none' stroke='%23c8882f' stroke-width='2'/></svg>">
 </head>
 <body>
 
-<!-- ===================== Écran de connexion ===================== -->
-<div id="login-screen" class="login-screen">
-  <form class="login-card" id="login-form">
-    <div class="login-logo">🎓</div>
-    <h1>Gestionnaire d'élèves</h1>
-    <p class="login-subtitle">Connectez-vous pour accéder à l'application</p>
+<!-- =====================================================================
+     Jeu d'icônes maison : tracé unique de 1.6px sur grille de 24,
+     extrémités arrondies. Un seul langage graphique pour toute l'application,
+     à la place des émojis (rendu imprévisible selon les systèmes).
+     ===================================================================== -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-board" viewBox="0 0 24 24"><path d="M3 4h18v12H3zM8 20h8M12 16v4"/></symbol>
+  <symbol id="i-students" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.2 6-5.2s6 1.9 6 5.2M16.5 5.2a3.2 3.2 0 0 1 0 6.1M18 14.3c2 .6 3.4 2.2 3.4 4.4"/></symbol>
+  <symbol id="i-class" viewBox="0 0 24 24"><path d="M4 21V6l8-3 8 3v15M9 21v-5h6v5M9 10h2M13 10h2"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 4h9a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3 3zM17 7h2v16H8"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M15.5 4.5 19 8 8.5 18.5 4 20l1.5-4.5zM13.5 6.5 17 10"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="16" rx="1.5"/><path d="M3.5 10h17M8 3v4M16 3v4M9 15l2 2 4-4"/></symbol>
+  <symbol id="i-rank" viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-6M22 20H2"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6zM14 3v5h5M9 13h6M9 17h6"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M15.5 12v2.5"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 8l5-5 5 5M4 20h16"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5 10 17.5 19 7"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 2.5 20h19zM12 10v5M12 17.5v.1"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.2l3.2 2"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-1.3 5.5M20 5v6h-6"/></symbol>
+  <symbol id="i-empty" viewBox="0 0 24 24"><path d="M3 13h5l1.5 3h5L16 13h5M4.5 13 7 5h10l2.5 8v6h-15z"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 20H5V4h9M10 12h10M17 8l4 4-4 4"/></symbol>
+</svg>
 
-    <label for="login-username">Identifiant ou e-mail</label>
-    <input id="login-username" name="username" type="text" autocomplete="username" required
-           placeholder="admin">
-
-    <label for="login-password">Mot de passe</label>
-    <input id="login-password" name="password" type="password" autocomplete="current-password"
-           required placeholder="••••••••">
-
-    <div id="login-error" class="alert alert-error hidden"></div>
-    <button type="submit" class="btn btn-primary btn-block" id="login-submit">Se connecter</button>
-    <p class="login-hint">
-      Première utilisation ? Le compte <strong>admin</strong> et son mot de passe
-      sont affichés dans la console du serveur au premier démarrage.
+<!-- ===================== Entrée ===================== -->
+<div id="login-screen" class="entry">
+  <!-- Volet gauche : l'ardoise. Pose le contexte, sans illustration décorative. -->
+  <aside class="entry__board">
+    <div class="wordmark wordmark--light">
+      <span class="wordmark__name">Registre</span>
+      <span class="wordmark__rule" aria-hidden="true"></span>
+      <span class="wordmark__sub">gestion des élèves</span>
+    </div>
+    <p class="entry__lede">
+      Le cahier de la classe, tenu une seule fois&nbsp;: inscriptions, notes,
+      appels et bulletins. Les moyennes et les rangs sont calculés par le
+      serveur, jamais saisis à la main.
     </p>
-  </form>
+    <p class="entry__facts-note">Trois niveaux d'accès&nbsp;: direction, enseignant, consultation.
+      Chaque action est vérifiée côté serveur, jamais seulement dans le navigateur.</p>
+    <p class="entry__foot">Les mots de passe sont stockés sous forme d'empreinte PBKDF2&#8209;SHA256. Aucun n'est lisible, y compris par l'administrateur.</p>
+  </aside>
+
+  <!-- Volet droit : le formulaire, sur papier. -->
+  <main class="entry__paper">
+    <form class="entry__form" id="login-form" novalidate>
+      <h1 class="entry__title">Ouvrir le registre</h1>
+      <p class="entry__hint">Identifiez-vous pour accéder à votre établissement.</p>
+
+      <div class="field">
+        <label for="login-username">Identifiant ou adresse e-mail</label>
+        <input id="login-username" name="username" type="text" autocomplete="username"
+               autocapitalize="none" spellcheck="false" required>
+      </div>
+
+      <div class="field">
+        <label for="login-password">Mot de passe</label>
+        <input id="login-password" name="password" type="password"
+               autocomplete="current-password" required>
+      </div>
+
+      <p id="login-error" class="notice notice--error" role="alert" hidden></p>
+
+      <button type="submit" class="btn btn--primary btn--full" id="login-submit">
+        Entrer
+      </button>
+
+      <p class="entry__note">
+        Première mise en service&nbsp;? Le compte <code>admin</code> et son mot de
+        passe provisoire sont inscrits dans le journal du serveur au premier
+        démarrage.
+      </p>
+    </form>
+  </main>
 </div>
 
 <!-- ===================== Application ===================== -->
-<div id="app" class="app hidden">
-  <aside class="sidebar" id="sidebar">
-    <div class="brand"><span class="brand-logo">🎓</span><span class="brand-text">Gestion Élèves</span></div>
-    <nav class="nav">
-      <a href="#/dashboard"  class="nav-item" data-nav="dashboard"><span>📊</span> Tableau de bord</a>
-      <a href="#/students"   class="nav-item" data-nav="students"><span>👥</span> Élèves</a>
-      <a href="#/classes"    class="nav-item" data-nav="classes"><span>🏫</span> Classes</a>
-      <a href="#/subjects"   class="nav-item" data-nav="subjects"><span>📚</span> Matières</a>
-      <a href="#/grades"     class="nav-item" data-nav="grades"><span>✍️</span> Notes</a>
-      <a href="#/attendance" class="nav-item" data-nav="attendance"><span>📅</span> Présences</a>
-      <a href="#/results"    class="nav-item" data-nav="results"><span>🏆</span> Résultats</a>
-      <a href="#/reports"    class="nav-item" data-nav="reports"><span>📄</span> Rapports</a>
-      <a href="#/users"      class="nav-item admin-only" data-nav="users"><span>🔐</span> Utilisateurs</a>
-      <a href="#/settings"   class="nav-item" data-nav="settings"><span>⚙️</span> Paramètres</a>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="user-badge">
-        <div class="avatar" id="user-initials">?</div>
-        <div>
-          <div class="user-name" id="user-name">—</div>
-          <div class="user-role" id="user-role">—</div>
-        </div>
+<div id="app" class="shell" hidden>
+  <a class="skip-link" href="#page-content">Aller au contenu</a>
+
+  <aside class="rail" id="sidebar">
+    <div class="rail__head">
+      <div class="wordmark wordmark--light">
+        <span class="wordmark__name">Registre</span>
+        <span class="wordmark__rule" aria-hidden="true"></span>
+        <span class="wordmark__sub">gestion des élèves</span>
       </div>
-      <button class="btn btn-ghost btn-block" id="logout-btn">Se déconnecter</button>
+    </div>
+
+    <nav class="rail__nav" aria-label="Sections">
+      <p class="rail__group">Suivi quotidien</p>
+      <a href="#/dashboard"  class="rail__item" data-nav="dashboard"><svg class="icon"><use href="#i-board"/></svg>Aujourd'hui</a>
+      <a href="#/students"   class="rail__item" data-nav="students"><svg class="icon"><use href="#i-students"/></svg>Élèves</a>
+      <a href="#/grades"     class="rail__item" data-nav="grades"><svg class="icon"><use href="#i-pen"/></svg>Notes</a>
+      <a href="#/attendance" class="rail__item" data-nav="attendance"><svg class="icon"><use href="#i-calendar"/></svg>Appel</a>
+
+      <p class="rail__group">Bilans</p>
+      <a href="#/results"    class="rail__item" data-nav="results"><svg class="icon"><use href="#i-rank"/></svg>Résultats</a>
+      <a href="#/reports"    class="rail__item" data-nav="reports"><svg class="icon"><use href="#i-doc"/></svg>Bulletins</a>
+
+      <p class="rail__group">Établissement</p>
+      <a href="#/classes"    class="rail__item" data-nav="classes"><svg class="icon"><use href="#i-class"/></svg>Classes</a>
+      <a href="#/subjects"   class="rail__item" data-nav="subjects"><svg class="icon"><use href="#i-book"/></svg>Matières</a>
+      <a href="#/users"      class="rail__item is-admin" data-nav="users"><svg class="icon"><use href="#i-key"/></svg>Comptes</a>
+      <a href="#/settings"   class="rail__item" data-nav="settings"><svg class="icon"><use href="#i-settings"/></svg>Réglages</a>
+    </nav>
+
+    <div class="rail__foot">
+      <div class="who">
+        <span class="who__mark" id="user-initials" aria-hidden="true">—</span>
+        <span class="who__text">
+          <span class="who__name" id="user-name">—</span>
+          <span class="who__role" id="user-role">—</span>
+        </span>
+      </div>
+      <button class="btn btn--quiet btn--full" id="logout-btn">
+        <svg class="icon"><use href="#i-logout"/></svg>Fermer la session
+      </button>
     </div>
   </aside>
 
-  <div class="main">
+  <div class="shell__main">
     <header class="topbar">
-      <button class="btn btn-ghost menu-toggle" id="menu-toggle" aria-label="Menu">☰</button>
-      <h1 id="page-title">Tableau de bord</h1>
-      <div class="topbar-actions" id="page-actions"></div>
+      <button class="btn btn--icon rail-toggle" id="menu-toggle" aria-label="Afficher le menu"
+              aria-expanded="false" aria-controls="sidebar">
+        <svg class="icon"><use href="#i-menu"/></svg>
+      </button>
+      <div class="topbar__title">
+        <h1 id="page-title">Aujourd'hui</h1>
+        <p class="topbar__sub" id="page-sub"></p>
+      </div>
+      <div class="topbar__actions" id="page-actions"></div>
     </header>
-    <main class="content" id="page-content"></main>
+
+    <main class="sheet" id="page-content" tabindex="-1"></main>
   </div>
 </div>
 
-<!-- Modale générique -->
-<div class="modal-backdrop hidden" id="modal-backdrop">
-  <div class="modal" role="dialog" aria-modal="true">
-    <div class="modal-header">
+<!-- Boîte de dialogue générique -->
+<div class="overlay" id="modal-backdrop" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <header class="dialog__head">
       <h2 id="modal-title">Titre</h2>
-      <button class="btn btn-ghost" id="modal-close" aria-label="Fermer">✕</button>
-    </div>
-    <div class="modal-body" id="modal-body"></div>
-    <div class="modal-footer" id="modal-footer"></div>
+      <button class="btn btn--icon" id="modal-close" aria-label="Fermer"><svg class="icon"><use href="#i-close"/></svg></button>
+    </header>
+    <div class="dialog__body" id="modal-body"></div>
+    <footer class="dialog__foot" id="modal-footer"></footer>
   </div>
 </div>
 
-<div id="toasts" class="toasts"></div>
+<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 
-<script src="/js/api.js?v=3"></script>
-<script src="/js/ui.js?v=3"></script>
-<script src="/js/charts.js?v=3"></script>
-<script src="/js/pages/dashboard.js?v=3"></script>
-<script src="/js/pages/students.js?v=3"></script>
-<script src="/js/pages/classes.js?v=3"></script>
-<script src="/js/pages/subjects.js?v=3"></script>
-<script src="/js/pages/grades.js?v=3"></script>
-<script src="/js/pages/attendance.js?v=3"></script>
-<script src="/js/pages/results.js?v=3"></script>
-<script src="/js/pages/reports.js?v=3"></script>
-<script src="/js/pages/users.js?v=3"></script>
-<script src="/js/pages/settings.js?v=3"></script>
-<script src="/js/app.js?v=3"></script>
+<script src="/js/api.js?v=4"></script>
+<script src="/js/ui.js?v=4"></script>
+<script src="/js/charts.js?v=4"></script>
+<script src="/js/pages/dashboard.js?v=4"></script>
+<script src="/js/pages/students.js?v=4"></script>
+<script src="/js/pages/classes.js?v=4"></script>
+<script src="/js/pages/subjects.js?v=4"></script>
+<script src="/js/pages/grades.js?v=4"></script>
+<script src="/js/pages/attendance.js?v=4"></script>
+<script src="/js/pages/results.js?v=4"></script>
+<script src="/js/pages/reports.js?v=4"></script>
+<script src="/js/pages/users.js?v=4"></script>
+<script src="/js/pages/settings.js?v=4"></script>
+<script src="/js/app.js?v=4"></script>
 </body>
 </html>

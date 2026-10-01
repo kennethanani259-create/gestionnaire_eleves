@@ -22,44 +22,44 @@
 
   function view(classes) {
     var columns = [
-      { key: 'name', label: 'Classe', render: function (c) { return '<span class="strong">' + UI.esc(c.name) + '</span>'; } },
+      { key: 'name', label: 'Classe', render: function (c) { return '<span class="name">' + UI.esc(c.name) + '</span>'; } },
       { key: 'level', label: 'Niveau' },
       { key: 'school_year_label', label: 'Année scolaire', render: function (c) { return UI.text(c.school_year_label); } },
       { key: 'main_teacher_name', label: 'Enseignant principal', render: function (c) { return UI.text(c.main_teacher_name); } },
       { key: 'room', label: 'Salle', render: function (c) { return UI.text(c.room); } },
       {
-        key: 'student_count', label: 'Effectif', className: 'text-center',
+        key: 'student_count', label: 'Effectif', cls: 't-center',
         render: function (c) {
           var text = c.student_count + (c.capacity ? ' / ' + c.capacity : '');
           var full = c.capacity && c.student_count >= c.capacity;
-          return UI.badge(text, full ? 'badge-warning' : 'badge-primary');
+          return UI.tag(text, full ? 'warn' : 'mark');
         }
       },
-      { key: 'subject_count', label: 'Matières', className: 'text-center' },
+      { key: 'subject_count', label: 'Matières', cls: 't-center' },
       {
-        key: 'actions', label: '', className: 'text-right',
+        key: 'actions', label: '', cls: 't-right',
         render: function (c) {
           var out = '<div class="row-actions">' +
-            '<button class="btn btn-secondary btn-sm" data-view="' + c.id + '">Élèves</button>' +
-            '<a class="btn btn-secondary btn-sm" href="#/results?class=' + c.id + '">Classement</a>';
+            '<button class="btn btn--sm" data-view="' + c.id + '">Élèves</button>' +
+            '<a class="btn btn--sm" href="#/results?class=' + c.id + '">Classement</a>';
           if (Api.can('ADMIN')) {
-            out += '<button class="btn btn-secondary btn-sm" data-edit="' + c.id + '">✏️</button>' +
-              '<button class="btn btn-danger btn-sm" data-del="' + c.id + '">🗑</button>';
+            out += '<button class="btn btn--sm" data-edit="' + c.id + '">' + UI.icon('edit') + '</button>' +
+              '<button class="btn btn--danger btn--sm" data-del="' + c.id + '">' + UI.icon('trash') + '</button>';
           }
           return out + '</div>';
         }
       }
     ];
 
-    return '<div class="stats-grid">' +
-      '<div class="stat-card"><div class="stat-icon">🏫</div><div>' +
-      '<div class="stat-value">' + classes.length + '</div>' +
-      '<div class="stat-label">Classes</div></div></div>' +
-      '<div class="stat-card"><div class="stat-icon">👥</div><div>' +
-      '<div class="stat-value">' + classes.reduce(function (s, c) { return s + (c.student_count || 0); }, 0) + '</div>' +
-      '<div class="stat-label">Élèves affectés</div></div></div>' +
-      '</div>' +
-      '<div class="card">' + UI.table(columns, classes, { emptyMessage: 'Aucune classe enregistrée' }) + '</div>';
+    var enrolled = classes.reduce(function (s, c) { return s + (c.student_count || 0); }, 0);
+    var seats = classes.reduce(function (s, c) { return s + (c.capacity || 0); }, 0);
+
+    return UI.readings([
+      { value: classes.length, label: 'Classes ouvertes' },
+      { value: enrolled, label: 'Élèves affectés',
+        note: seats ? 'sur ' + seats + ' places déclarées' : null }
+    ]) +
+      '<div class="panel">' + UI.table(columns, classes, { emptyTitle: 'Aucune classe enregistrée' }) + '</div>';
   }
 
   function bind(container, classes) {
@@ -88,22 +88,22 @@
   }
 
   function showStudents(classRoom) {
-    UI.modal({ title: 'Élèves de ' + classRoom.name, body: UI.spinner(), buttons: [{ label: 'Fermer' }] });
+    UI.modal({ title: 'Élèves de ' + classRoom.name, body: UI.loading(), buttons: [{ label: 'Fermer' }] });
     Api.get('/api/classes/' + classRoom.id + '/students').then(function (data) {
       document.getElementById('modal-body').innerHTML = UI.table([
-        { key: 'matricule', label: 'Matricule', className: 'mono' },
+        { key: 'matricule', label: 'Matricule', cls: 'mono' },
         {
           key: 'full_name', label: 'Nom',
           render: function (s) { return '<a href="#/students/' + s.id + '">' + UI.esc(s.full_name) + '</a>'; }
         },
         {
           key: 'status', label: 'Statut',
-          render: function (s) { return UI.badge(s.status_label || s.status, UI.STATUS_BADGE[s.status]); }
+          render: function (s) { return UI.tag(s.status_label || s.status, UI.STATUS_TAG[s.status]); }
         }
-      ], data.items, { emptyMessage: 'Cette classe ne contient aucun élève' });
+      ], data.items, { emptyTitle: 'Cette classe ne contient aucun élève' });
     }).catch(function (err) {
       document.getElementById('modal-body').innerHTML =
-        '<div class="alert alert-error">' + UI.esc(err.message) + '</div>';
+        '<div class="notice notice--error">' + UI.esc(err.message) + '</div>';
     });
   }
 
@@ -113,31 +113,31 @@
       var currentYear = years.filter(function (y) { return y.is_current; })[0];
 
       var fields = [
-        { name: 'name', label: 'Nom de la classe', value: c.name, required: true, col: 'half', placeholder: '6ème A' },
-        { name: 'level', label: 'Niveau', value: c.level, required: true, col: 'half', placeholder: '6ème' },
+        { name: 'name', label: 'Nom de la classe', value: c.name, required: true, half: true, placeholder: '6ème A' },
+        { name: 'level', label: 'Niveau', value: c.level, required: true, half: true, placeholder: '6ème' },
         {
-          name: 'school_year_id', label: 'Année scolaire', type: 'select', col: 'half',
+          name: 'school_year_id', label: 'Année scolaire', type: 'select', half: true,
           value: c.school_year_id || (currentYear ? currentYear.id : ''),
           options: years.map(function (y) { return { value: y.id, label: y.label }; })
         },
         {
-          name: 'main_teacher_id', label: 'Enseignant principal', type: 'select', col: 'half',
+          name: 'main_teacher_id', label: 'Enseignant principal', type: 'select', half: true,
           value: c.main_teacher_id,
           options: [{ value: '', label: '— Aucun —' }].concat(teachers.map(function (t) {
             return { value: t.id, label: t.full_name };
           }))
         },
-        { name: 'room', label: 'Salle', value: c.room, col: 'half' },
-        { name: 'capacity', label: 'Capacité', type: 'number', min: 0, value: c.capacity, col: 'half' }
+        { name: 'room', label: 'Salle', value: c.room, half: true },
+        { name: 'capacity', label: 'Capacité', type: 'number', min: 0, value: c.capacity, half: true }
       ];
 
       UI.modal({
         title: classRoom ? 'Modifier la classe' : 'Nouvelle classe',
         body: UI.form(fields, 'class-form'),
         buttons: [
-          { label: 'Annuler', className: 'btn-secondary' },
+          { label: 'Annuler' },
           {
-            label: 'Enregistrer', className: 'btn-primary',
+            label: 'Enregistrer', variant: 'primary',
             onClick: function (button) {
               var form = document.getElementById('class-form');
               var data = UI.readForm(form);
