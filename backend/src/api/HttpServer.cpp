@@ -134,13 +134,26 @@ void HttpServer::registerMiddlewares() {
     });
 
     // En-tetes communs (securite + CORS pour un frontend servi separement).
-    server.set_post_routing_handler([](const httplib::Request&, httplib::Response& res) {
+    server.set_post_routing_handler([](const httplib::Request& req, httplib::Response& res) {
         res.set_header("X-Content-Type-Options", "nosniff");
-        res.set_header("X-Frame-Options", "SAMEORIGIN");
         res.set_header("Referrer-Policy", "same-origin");
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
         res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+
+        // L'application doit pouvoir etre affichee dans un cadre (previsualisation,
+        // integration a un portail). On autorise donc l'encadrement explicitement
+        // plutot que de le bloquer par X-Frame-Options: SAMEORIGIN.
+        res.set_header("Content-Security-Policy", "frame-ancestors *");
+
+        // Les fichiers du frontend ne doivent jamais etre servis depuis un cache
+        // perime : sans cet en-tete, un navigateur peut conserver une ancienne
+        // version du JavaScript apres une mise a jour. L'API n'est jamais cachee.
+        if (req.path.rfind("/api/", 0) == 0) {
+            res.set_header("Cache-Control", "no-store");
+        } else {
+            res.set_header("Cache-Control", "no-cache, must-revalidate");
+        }
     });
 
     // Pre-vol CORS.
