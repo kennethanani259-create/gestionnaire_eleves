@@ -12,6 +12,48 @@
   var TOKEN_KEY = 'ge.token';
   var USER_KEY = 'ge.user';
 
+  /**
+   * Stockage de session résistant aux environnements où localStorage est
+   * indisponible (navigation privée stricte, iframe au stockage cloisonné,
+   * cookies tiers bloqués). On bascule alors silencieusement sur une mémoire
+   * volatile : la session reste valable pour l'onglet courant.
+   */
+  var Store = (function () {
+    var memory = {};
+    var available = (function () {
+      try {
+        var probe = '__ge_probe__';
+        window.localStorage.setItem(probe, '1');
+        window.localStorage.removeItem(probe);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    })();
+
+    return {
+      persistent: available,
+      get: function (key) {
+        if (available) {
+          try { return window.localStorage.getItem(key); } catch (e) { /* bascule mémoire */ }
+        }
+        return Object.prototype.hasOwnProperty.call(memory, key) ? memory[key] : null;
+      },
+      set: function (key, value) {
+        memory[key] = value;
+        if (available) {
+          try { window.localStorage.setItem(key, value); } catch (e) { /* mémoire seule */ }
+        }
+      },
+      remove: function (key) {
+        delete memory[key];
+        if (available) {
+          try { window.localStorage.removeItem(key); } catch (e) { /* mémoire seule */ }
+        }
+      }
+    };
+  })();
+
   /** Erreur applicative portant le statut HTTP et les détails de validation. */
   function ApiError(status, code, message, fields) {
     var err = new Error(message || 'Erreur inattendue');
@@ -24,18 +66,19 @@
 
   var Api = {
     /* ----------------------------- Session ----------------------------- */
-    token: function () { return localStorage.getItem(TOKEN_KEY); },
+    storageIsPersistent: Store.persistent,
+    token: function () { return Store.get(TOKEN_KEY); },
     user: function () {
-      try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); }
+      try { return JSON.parse(Store.get(USER_KEY) || 'null'); }
       catch (e) { return null; }
     },
     setSession: function (token, user) {
-      localStorage.setItem(TOKEN_KEY, token);
-      localStorage.setItem(USER_KEY, JSON.stringify(user || null));
+      Store.set(TOKEN_KEY, token);
+      Store.set(USER_KEY, JSON.stringify(user || null));
     },
     clearSession: function () {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
+      Store.remove(TOKEN_KEY);
+      Store.remove(USER_KEY);
     },
     isLoggedIn: function () { return !!this.token(); },
     role: function () { var u = this.user(); return u ? u.role : null; },
