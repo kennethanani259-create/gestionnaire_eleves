@@ -75,10 +75,18 @@
     setSession: function (token, user) {
       Store.set(TOKEN_KEY, token);
       Store.set(USER_KEY, JSON.stringify(user || null));
+      // Canal de secours : certains intermediaires reseau suppriment l'en-tete
+      // Authorization. Le cookie voyage alors avec la requete.
+      try {
+        document.cookie = 'ge_token=' + token + '; path=/; max-age=43200; SameSite=Lax';
+      } catch (e) { /* cookies indisponibles : les en-tetes suffiront */ }
     },
     clearSession: function () {
       Store.remove(TOKEN_KEY);
       Store.remove(USER_KEY);
+      try {
+        document.cookie = 'ge_token=; path=/; max-age=0; SameSite=Lax';
+      } catch (e) { /* rien a nettoyer */ }
     },
     isLoggedIn: function () { return !!this.token(); },
     role: function () { var u = this.user(); return u ? u.role : null; },
@@ -93,7 +101,12 @@
       options = options || {};
       var headers = { 'Accept': 'application/json' };
       var token = this.token();
-      if (token) headers['Authorization'] = 'Bearer ' + token;
+      if (token) {
+        headers['Authorization'] = 'Bearer ' + token;
+        // Doublon volontaire : si un proxy consomme l'en-tete Authorization,
+        // le serveur accepte aussi X-Auth-Token.
+        headers['X-Auth-Token'] = token;
+      }
 
       var payload;
       if (body !== undefined && body !== null) {
