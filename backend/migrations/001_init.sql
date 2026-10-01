@@ -152,9 +152,13 @@ CREATE TABLE IF NOT EXISTS attendance (
     justification  TEXT,
     comment        TEXT,
     created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-    updated_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-    UNIQUE (student_id, att_date, att_time, subject_id)
+    updated_at     TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+-- Unicite d'un releve : un index sur expressions est indispensable car une
+-- contrainte UNIQUE classique ne bloquerait pas les doublons des que
+-- att_time ou subject_id vaut NULL (en SQL, NULL est toujours distinct de NULL).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_unique
+    ON attendance(student_id, att_date, IFNULL(att_time, ''), IFNULL(subject_id, -1));
 CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_date    ON attendance(att_date);
 CREATE INDEX IF NOT EXISTS idx_attendance_status  ON attendance(status);
