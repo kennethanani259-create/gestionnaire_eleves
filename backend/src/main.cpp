@@ -1,20 +1,64 @@
-// Composition root — sera etoffe aux etapes 5 a 10.
-// A ce stade : verification que la chaine de compilation et les dependances
-// (SQLite 3, nlohmann/json, cpp-httplib) sont pleinement fonctionnelles.
+/**
+ * @file main.cpp
+ * @brief Point d'entree : configuration, base de donnees, migrations, serveur.
+ *
+ * Aucune logique metier ici : tout est delegue aux couches dediees.
+ */
+#include <csignal>
 #include <cstdlib>
-#include <iostream>
-#include <string>
+#include <exception>
+#include <memory>
 
-#include <nlohmann/json.hpp>
-#include <sqlite3/sqlite3.h>
+#include "api/HttpServer.hpp"
+#include "core/Config.hpp"
+#include "core/Error.hpp"
+#include "core/Logger.hpp"
+#include "database/Database.hpp"
+#include "database/Migrator.hpp"
+
+namespace {
+
+app::api::HttpServer* g_server = nullptr;
+
+void handleSignal(int signal) {
+    LOG_INFO("main", "Signal " + std::to_string(signal) + " recu, arret en cours...");
+    if (g_server != nullptr) g_server->stop();
+}
+
+}  // namespace
 
 int main() {
-    nlohmann::json info{
-        {"application", "gestionnaire_eleves"},
-        {"version", "1.0.0"},
-        {"sqlite", sqlite3_libversion()},
-        {"cxx_standard", __cplusplus},
-    };
-    std::cout << info.dump(2) << std::endl;
-    return EXIT_SUCCESS;
+    try {
+        app::Config::loadDotEnv(".env");
+        auto config = app::Config::fromEnvironment();
+        config.validate();
+
+        auto& logger = app::Logger::instance();
+        logger.setLevel(config.logLevel);
+        if (!config.logFile.empty()) logger.setFile(config.logFile);
+
+        LOG_INFO("main", "Gestionnaire d'eleves 1.0.0");
+
+        app::Database db(config.dbPath);
+        app::Migrator migrator(db, config.migrationsDir);
+        migrator.migrate();
+
+        app::api::HttpServer server(config, db);
+        g_server = &server;
+        std::signal(SIGINT, handleSignal);
+        std::signal(SIGTERM, handleSignal);
+
+        if (!server.run()) {
+            LOG_CRITICAL("main", "Le serveur n'a pas pu demarrer");
+            return EXIT_FAILURE;
+        }
+        LOG_INFO("main", "Serveur arrete proprement");
+        return EXIT_SUCCESS;
+    } catch (const app::AppException& e) {
+        LOG_CRITICAL("main", std::string("Erreur applicative: ") + e.what());
+        return EXIT_FAILURE;
+    } catch (const std::exception& e) {
+        LOG_CRITICAL("main", std::string("Erreur fatale: ") + e.what());
+        return EXIT_FAILURE;
+    }
 }

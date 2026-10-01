@@ -47,7 +47,7 @@ target_link_libraries(sqlite3 PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
 
 # -- Headers only -----------------------------------------------------------
 add_library(third_party_headers INTERFACE)
-target_include_directories(third_party_headers INTERFACE ${THIRD_PARTY})
+target_include_directories(third_party_headers SYSTEM INTERFACE ${THIRD_PARTY})
 
 # ---------------------------------------------------------------------------
 # Bibliotheque metier : gestionnaire_core

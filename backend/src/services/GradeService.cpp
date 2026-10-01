@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <sstream>
 
 #include "core/Error.hpp"
 #include "core/Logger.hpp"
@@ -82,8 +83,10 @@ void GradeService::validate(const Grade& grade) {
 
     if (grade.score < 0) validator.add("score", "La note ne peut pas etre negative");
     if (grade.maxScore > 0 && grade.score > grade.maxScore) {
-        validator.add("score", "La note ne peut pas depasser le bareme (" +
-                                   std::to_string(grade.maxScore) + ")");
+        std::ostringstream message;
+        message << "La note ne peut pas depasser le bareme (" << std::noshowpoint
+                << grade.maxScore << ")";
+        validator.add("score", message.str());
     }
     if (grade.maxScore > 1000) validator.add("max_score", "Bareme irrealiste");
     if (datetime::isValidDate(grade.evalDate) && grade.evalDate > datetime::today()) {

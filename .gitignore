@@ -1,25 +1,23 @@
+
 # Build
-build/
-cmake-build-*/
-*.o
-*.a
-*.so
-*.exe
-
 # Donnees locales
-*.db
-*.db-wal
-*.db-shm
-data/
-uploads/
-logs/
-*.log
-
+# Editeurs / OS
 # Environnement
+*.a
+*.db
+*.db-shm
+*.db-wal
+*.exe
+*.log
+*.o
+*.so
+.DS_Store
 .env
 .env.local
-
-# Editeurs / OS
-.vscode/
 .idea/
-.DS_Store
+.vscode/
+build/
+cmake-build-*/
+data/
+logs/
+uploads/
