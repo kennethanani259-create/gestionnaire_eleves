@@ -17,6 +17,7 @@
 #include "repositories/SchoolYearRepository.hpp"
 #include "repositories/StudentRepository.hpp"
 #include "repositories/SubjectRepository.hpp"
+#include "repositories/UserRepository.hpp"
 
 namespace testing {
 

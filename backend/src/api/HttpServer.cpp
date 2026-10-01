@@ -5,11 +5,14 @@
 
 #include <nlohmann/json.hpp>
 
+#include "controllers/AuthController.hpp"
 #include "controllers/ClassController.hpp"
 #include "controllers/GradeController.hpp"
+#include "controllers/ReportController.hpp"
 #include "controllers/StudentController.hpp"
 #include "core/Error.hpp"
 #include "core/Logger.hpp"
+#include "middleware/AuthMiddleware.hpp"
 #include "middleware/ErrorHandler.hpp"
 #include "repositories/AttendanceRepository.hpp"
 #include "repositories/ClassRepository.hpp"
@@ -20,8 +23,10 @@
 #include "repositories/TeacherRepository.hpp"
 #include "repositories/UserRepository.hpp"
 #include "services/AttendanceService.hpp"
+#include "services/AuthService.hpp"
 #include "services/ClassService.hpp"
 #include "services/GradeService.hpp"
+#include "services/ReportService.hpp"
 #include "services/StudentService.hpp"
 #include "utils/Http.hpp"
 
@@ -48,15 +53,22 @@ struct HttpServer::Impl {
     ClassService classService;
     GradeService gradeService;
     AttendanceService attendanceService;
+    AuthService authService;
+    ReportService reportService;
+
+    // Middleware d'authentification (doit preceder le routeur)
+    middleware::AuthMiddleware authMiddleware;
 
     // Controleurs
     StudentController studentController;
     ClassController classController;
     GradeController gradeController;
+    AuthController authController;
+    ReportController reportController;
 
     Router router;
 
-    Impl(Config cfg, Database& database, Guard guard)
+    Impl(Config cfg, Database& database)
         : config(std::move(cfg)),
           db(database),
           studentRepo(db),
@@ -71,17 +83,27 @@ struct HttpServer::Impl {
           classService(classRepo, subjectRepo, studentRepo, teacherRepo, yearRepo),
           gradeService(gradeRepo, studentRepo, subjectRepo, classRepo, attendanceRepo),
           attendanceService(attendanceRepo, studentRepo, subjectRepo, classRepo),
+          authService(userRepo, config.jwtSecret, config.jwtTtlMinutes),
+          reportService(studentService, classService, gradeService, attendanceService,
+                        studentRepo, gradeRepo),
+          authMiddleware(authService),
           studentController(studentService, gradeService, attendanceService),
           classController(classService, studentService, gradeService),
           gradeController(gradeService, attendanceService),
-          router(server, std::move(guard)) {}
+          authController(authService),
+          reportController(reportService),
+          // Le garde du routeur delegue au middleware d'authentification :
+          // toute route non publique exige un jeton valide et le role requis.
+          router(server, [this](const httplib::Request& req, Access access) {
+              authMiddleware(req, access);
+          }) {}
 };
 
 HttpServer::HttpServer(Config config, Database& db) {
-    // Le garde d'authentification est installe a l'etape suivante ; pour
-    // l'instant toutes les routes sont ouvertes (serveur de developpement).
-    Guard guard = [](const httplib::Request&, Access) {};
-    impl_ = std::make_unique<Impl>(std::move(config), db, std::move(guard));
+    impl_ = std::make_unique<Impl>(std::move(config), db);
+
+    // Cree le compte administrateur initial si la base ne contient aucun compte.
+    impl_->authService.ensureInitialAdmin();
 
     registerMiddlewares();
     registerRoutes();
@@ -165,9 +187,11 @@ void HttpServer::registerRoutes() {
                                    {"database", impl_->db.path()}});
                });
 
+    impl_->authController.registerRoutes(router);
     impl_->studentController.registerRoutes(router);
     impl_->classController.registerRoutes(router);
     impl_->gradeController.registerRoutes(router);
+    impl_->reportController.registerRoutes(router);
 }
 
 void HttpServer::registerStaticFiles() {

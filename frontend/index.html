@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gestionnaire d'élèves</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>">
+</head>
+<body>
+
+<!-- ===================== Écran de connexion ===================== -->
+<div id="login-screen" class="login-screen">
+  <form class="login-card" id="login-form">
+    <div class="login-logo">🎓</div>
+    <h1>Gestionnaire d'élèves</h1>
+    <p class="login-subtitle">Connectez-vous pour accéder à l'application</p>
+
+    <label for="login-username">Identifiant ou e-mail</label>
+    <input id="login-username" name="username" type="text" autocomplete="username" required
+           placeholder="admin">
+
+    <label for="login-password">Mot de passe</label>
+    <input id="login-password" name="password" type="password" autocomplete="current-password"
+           required placeholder="••••••••">
+
+    <div id="login-error" class="alert alert-error hidden"></div>
+    <button type="submit" class="btn btn-primary btn-block" id="login-submit">Se connecter</button>
+    <p class="login-hint">
+      Première utilisation ? Le compte <strong>admin</strong> et son mot de passe
+      sont affichés dans la console du serveur au premier démarrage.
+    </p>
+  </form>
+</div>
+
+<!-- ===================== Application ===================== -->
+<div id="app" class="app hidden">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><span class="brand-logo">🎓</span><span class="brand-text">Gestion Élèves</span></div>
+    <nav class="nav">
+      <a href="#/dashboard"  class="nav-item" data-nav="dashboard"><span>📊</span> Tableau de bord</a>
+      <a href="#/students"   class="nav-item" data-nav="students"><span>👥</span> Élèves</a>
+      <a href="#/classes"    class="nav-item" data-nav="classes"><span>🏫</span> Classes</a>
+      <a href="#/subjects"   class="nav-item" data-nav="subjects"><span>📚</span> Matières</a>
+      <a href="#/grades"     class="nav-item" data-nav="grades"><span>✍️</span> Notes</a>
+      <a href="#/attendance" class="nav-item" data-nav="attendance"><span>📅</span> Présences</a>
+      <a href="#/results"    class="nav-item" data-nav="results"><span>🏆</span> Résultats</a>
+      <a href="#/reports"    class="nav-item" data-nav="reports"><span>📄</span> Rapports</a>
+      <a href="#/users"      class="nav-item admin-only" data-nav="users"><span>🔐</span> Utilisateurs</a>
+      <a href="#/settings"   class="nav-item" data-nav="settings"><span>⚙️</span> Paramètres</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-badge">
+        <div class="avatar" id="user-initials">?</div>
+        <div>
+          <div class="user-name" id="user-name">—</div>
+          <div class="user-role" id="user-role">—</div>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-block" id="logout-btn">Se déconnecter</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="btn btn-ghost menu-toggle" id="menu-toggle" aria-label="Menu">☰</button>
+      <h1 id="page-title">Tableau de bord</h1>
+      <div class="topbar-actions" id="page-actions"></div>
+    </header>
+    <main class="content" id="page-content"></main>
+  </div>
+</div>
+
+<!-- Modale générique -->
+<div class="modal-backdrop hidden" id="modal-backdrop">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-header">
+      <h2 id="modal-title">Titre</h2>
+      <button class="btn btn-ghost" id="modal-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="/js/api.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/charts.js"></script>
+<script src="/js/pages/dashboard.js"></script>
+<script src="/js/pages/students.js"></script>
+<script src="/js/pages/classes.js"></script>
+<script src="/js/pages/subjects.js"></script>
+<script src="/js/pages/grades.js"></script>
+<script src="/js/pages/attendance.js"></script>
+<script src="/js/pages/results.js"></script>
+<script src="/js/pages/reports.js"></script>
+<script src="/js/pages/users.js"></script>
+<script src="/js/pages/settings.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
