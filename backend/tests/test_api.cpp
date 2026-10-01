@@ -416,8 +416,26 @@ TEST_CASE("API: en-tetes de securite presents sur les reponses") {
     auto res = client.Get("/api/health");
     REQUIRE(res);
     CHECK(res->get_header_value("X-Content-Type-Options") == "nosniff");
-    CHECK(res->get_header_value("X-Frame-Options") == "SAMEORIGIN");
+    CHECK(res->get_header_value("Referrer-Policy") == "same-origin");
     CHECK(res->get_header_value("Content-Type").find("application/json") != std::string::npos);
+
+    // L'encadrement est autorise volontairement (previsualisation, portail),
+    // via CSP plutot que par l'ancien X-Frame-Options: SAMEORIGIN.
+    CHECK(res->get_header_value("Content-Security-Policy") == "frame-ancestors *");
+    CHECK(res->get_header_value("X-Frame-Options").empty());
+
+    // Les reponses de l'API ne doivent jamais etre mises en cache.
+    CHECK(res->get_header_value("Cache-Control") == "no-store");
+}
+
+TEST_CASE("API: les fichiers du frontend ne sont pas mis en cache") {
+    ApiFixture api;
+    auto client = api.client();
+    // Une ressource statique inexistante suffit : l'en-tete est pose par le
+    // post-routing handler, qui s'applique a toutes les reponses hors /api/.
+    auto res = client.Get("/index.html");
+    REQUIRE(res);
+    CHECK(res->get_header_value("Cache-Control") == "no-cache, must-revalidate");
 }
 
 TEST_CASE("API: le serveur survit a une rafale de requetes invalides") {
