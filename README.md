@@ -132,6 +132,27 @@ Le code compile sans aucun avertissement avec `-Wall -Wextra -Wpedantic`.
 | `APP_THREAD_POOL_SIZE` | `8`                   | Threads HTTP                              |
 | `APP_LOG_LEVEL`        | `INFO`                | `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`|
 | `APP_LOG_FILE`         | *(vide)*              | Fichier de log en plus de la console      |
+| `APP_SELF_REGISTRATION`| `approval`            | Inscription publique : `off`, `approval`, `open` |
+
+### Inscription depuis la page d'accueil
+
+La page d'entrée propose deux volets : **Se connecter** et **Demander un compte**.
+`APP_SELF_REGISTRATION` décide du sort des demandes :
+
+| Valeur     | Effet                                                                     |
+| ---------- | ------------------------------------------------------------------------- |
+| `off`      | Aucune inscription publique ; l'onglet n'est pas affiché. Seul un administrateur crée les comptes. |
+| `approval` | *(défaut)* Le compte est créé **inactif**. Il apparaît dans « Comptes » où un administrateur le valide ou le refuse. La connexion est refusée (403) avant validation. |
+| `open`     | Le compte est immédiatement utilisable.                                    |
+
+Dans tous les cas, un compte issu de cette page reçoit **obligatoirement** le rôle
+`VIEWER` : le rôle et l'état d'activation envoyés par le navigateur sont ignorés.
+Le mot de passe doit faire au moins 10 caractères et mêler lettres et chiffres, et
+les demandes sont limitées à 5 par quart d'heure et par adresse source.
+
+> `approval` est le défaut volontairement : un registre scolaire contient des
+> données personnelles d'élèves mineurs, une inscription en libre-service ne doit
+> pas y donner accès sans décision humaine.
 
 Les migrations SQL sont appliquées automatiquement au démarrage.
 

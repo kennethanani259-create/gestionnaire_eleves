@@ -191,6 +191,10 @@
         });
     },
     me: function () { return this.get('/api/auth/me'); },
+    /** Politique d'inscription en vigueur (route publique). */
+    registrationPolicy: function () { return this.get('/api/auth/registration'); },
+    /** Demande de compte depuis la page publique. */
+    register: function (payload) { return this.post('/api/auth/register', payload); },
     changePassword: function (current, next) {
       return this.post('/api/auth/password',
         { current_password: current, new_password: next });

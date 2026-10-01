@@ -497,6 +497,95 @@ TEST_CASE("API: connexion et profil utilisateur") {
     }
 }
 
+TEST_CASE("API: inscription autonome sur la page publique") {
+    ApiFixture api;
+    auto anonymous = api.anonymousClient();
+
+    SUBCASE("etat de l'inscription expose publiquement") {
+        auto res = anonymous.Get("/api/auth/registration");
+        REQUIRE(res);
+        CHECK(res->status == 200);
+        const auto body = ApiFixture::body(res);
+        CHECK(body["enabled"] == true);
+        CHECK(body["mode"] == "approval");
+        CHECK(body["requires_approval"] == true);
+    }
+
+    SUBCASE("demande valide -> 201, compte en attente de validation") {
+        auto res = anonymous.Post("/api/auth/register",
+                                  R"({"username":"parent","email":"parent@test.local",
+                                      "password":"MotDePasse123","full_name":"Parent Test"})",
+                                  kJson);
+        REQUIRE(res);
+        CHECK(res->status == 201);
+        const auto body = ApiFixture::body(res);
+        CHECK(body["pending_approval"] == true);
+        CHECK(body["user"]["username"] == "parent");
+        // Role impose, jamais negocie depuis le navigateur.
+        CHECK(body["user"]["role"] == "VIEWER");
+        CHECK(body["user"]["is_active"] == false);
+        // Aucune empreinte de mot de passe ne doit transiter.
+        CHECK(res->body.find("pbkdf2") == std::string::npos);
+
+        // Tant que l'administrateur n'a pas valide, la connexion est refusee.
+        auto login = anonymous.Post("/api/auth/login",
+                                    R"({"username":"parent","password":"MotDePasse123"})", kJson);
+        REQUIRE(login);
+        CHECK(login->status == 403);
+
+        // Apres activation par un administrateur, la connexion fonctionne.
+        auto admin = api.client();
+        const auto id = body["user"]["id"].get<long long>();
+        auto activation = admin.Put("/api/users/" + std::to_string(id),
+                                    R"({"username":"parent","email":"parent@test.local",
+                                        "full_name":"Parent Test","role":"VIEWER",
+                                        "is_active":true})",
+                                    kJson);
+        REQUIRE(activation);
+        CHECK(activation->status == 200);
+
+        auto login2 = anonymous.Post("/api/auth/login",
+                                     R"({"username":"parent","password":"MotDePasse123"})", kJson);
+        REQUIRE(login2);
+        CHECK(login2->status == 200);
+        CHECK(ApiFixture::body(login2)["user"]["role"] == "VIEWER");
+    }
+
+    SUBCASE("un role privilegie demande par le client est ignore") {
+        auto res = anonymous.Post("/api/auth/register",
+                                  R"({"username":"pirate","email":"pirate@test.local",
+                                      "password":"MotDePasse123","full_name":"Pirate",
+                                      "role":"ADMIN","is_active":true})",
+                                  kJson);
+        REQUIRE(res);
+        CHECK(res->status == 201);
+        CHECK(ApiFixture::body(res)["user"]["role"] == "VIEWER");
+        CHECK(ApiFixture::body(res)["user"]["is_active"] == false);
+    }
+
+    SUBCASE("identifiant deja pris -> 400 avec le champ en faute") {
+        auto res = anonymous.Post("/api/auth/register",
+                                  R"({"username":"admin","email":"autre@test.local",
+                                      "password":"MotDePasse123","full_name":"Doublon"})",
+                                  kJson);
+        REQUIRE(res);
+        CHECK(res->status == 400);
+        const auto body = ApiFixture::body(res);
+        CHECK(body["error"]["code"] == "VALIDATION_ERROR");
+        CHECK(body["error"]["details"]["fields"].contains("username"));
+    }
+
+    SUBCASE("mot de passe trop faible -> 400") {
+        auto res = anonymous.Post("/api/auth/register",
+                                  R"({"username":"faible","email":"faible@test.local",
+                                      "password":"motdepasse","full_name":"Faible"})",
+                                  kJson);
+        REQUIRE(res);
+        CHECK(res->status == 400);
+        CHECK(ApiFixture::body(res)["error"]["details"]["fields"].contains("password"));
+    }
+}
+
 TEST_CASE("API: les routes protegees exigent un jeton valide") {
     ApiFixture api;
     auto anonymous = api.anonymousClient();

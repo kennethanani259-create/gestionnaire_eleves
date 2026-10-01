@@ -1,5 +1,7 @@
 #include "services/AuthService.hpp"
 
+#include <cctype>
+
 #include "core/Error.hpp"
 #include "core/Logger.hpp"
 #include "utils/Crypto.hpp"
@@ -10,6 +12,15 @@ namespace app {
 nlohmann::json AuthResult::toJson() const {
     return {{"token", token}, {"token_type", "Bearer"}, {"expires_in", expiresIn},
             {"user", user.toJson()}};
+}
+
+nlohmann::json RegistrationResult::toJson() const {
+    return {{"user", user.toJson()},
+            {"pending_approval", pendingApproval},
+            {"message", pendingApproval
+                            ? std::string("Demande enregistree. Un administrateur doit valider "
+                                          "votre compte avant la premiere connexion.")
+                            : std::string("Compte cree. Vous pouvez vous connecter.")}};
 }
 
 void AuthService::requireRole(UserRole actual, UserRole required) {
@@ -43,7 +54,8 @@ AuthResult AuthService::login(const std::string& identifier, const std::string& 
     }
     if (!user->isActive) {
         LOG_WARN("auth", "Tentative de connexion sur un compte desactive: " + user->username);
-        throw ForbiddenError("Ce compte est desactive");
+        throw ForbiddenError(
+            "Ce compte n'est pas encore actif. Un administrateur doit le valider.");
     }
 
     users_.touchLastLogin(user->id);
@@ -94,6 +106,60 @@ void AuthService::validateCredentials(const std::string& username, const std::st
         validator.add("email", "Cette adresse e-mail est deja utilisee");
     }
     validator.throwIfInvalid();
+}
+
+void AuthService::validatePasswordStrength(Validator& validator, const std::string& password) {
+    // Un mot de passe choisi depuis une page publique merite une exigence plus
+    // elevee que celle d'un compte cree par un administrateur.
+    if (password.size() < 10) {
+        validator.add("password", "Au moins 10 caracteres sont necessaires");
+        return;
+    }
+    bool hasLetter = false;
+    bool hasDigit = false;
+    for (unsigned char c : password) {
+        if (std::isalpha(c) != 0) hasLetter = true;
+        if (std::isdigit(c) != 0) hasDigit = true;
+    }
+    if (!hasLetter || !hasDigit) {
+        validator.add("password", "Melangez au moins des lettres et des chiffres");
+    }
+}
+
+RegistrationResult AuthService::selfRegister(const std::string& username, const std::string& email,
+                                             const std::string& password,
+                                             const std::string& fullName) {
+    if (selfRegistration_ == SelfRegistration::Off) {
+        throw ForbiddenError(
+            "La creation de compte en ligne est desactivee sur cet etablissement. "
+            "Adressez-vous a l'administrateur du registre.");
+    }
+
+    // Les regles communes d'abord (unicite, format), puis la robustesse du mot de passe.
+    validateCredentials(username, email, password, fullName, std::nullopt);
+    Validator validator;
+    validator.required("password", password);
+    if (!password.empty()) validatePasswordStrength(validator, password);
+    validator.throwIfInvalid();
+
+    User user;
+    user.username = username;
+    user.email = email;
+    user.passwordHash = crypto::hashPassword(password);
+    user.fullName = fullName;
+    // Impose, jamais lu depuis la requete : une inscription publique ne peut pas
+    // s'octroyer un role d'ecriture.
+    user.role = UserRole::Viewer;
+    user.isActive = (selfRegistration_ == SelfRegistration::Open);
+
+    const long long id = users_.create(user);
+    LOG_INFO("auth", std::string("Inscription publique: ") + username +
+                         (user.isActive ? " (active)" : " (en attente de validation)"));
+
+    RegistrationResult result;
+    result.user = getUser(id);
+    result.pendingApproval = !user.isActive;
+    return result;
 }
 
 User AuthService::createUser(const std::string& username, const std::string& email,

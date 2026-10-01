@@ -10,6 +10,16 @@
 
 namespace app {
 
+/// Politique d'inscription autonome (APP_SELF_REGISTRATION).
+enum class SelfRegistration {
+    Off,       ///< aucune inscription publique : seul un administrateur cree les comptes
+    Approval,  ///< inscription publique, compte inactif jusqu'a validation par un administrateur
+    Open       ///< inscription publique immediatement utilisable (role Consultation)
+};
+
+SelfRegistration selfRegistrationFromString(const std::string& value);
+std::string toString(SelfRegistration mode);
+
 struct Config {
     std::string host = "0.0.0.0";
     int port = 8080;
@@ -22,6 +32,8 @@ struct Config {
     LogLevel logLevel = LogLevel::Info;
     std::string logFile;                ///< vide = console uniquement
     int threadPoolSize = 8;
+    /// Par defaut : inscription ouverte mais soumise a validation d'un administrateur.
+    SelfRegistration selfRegistration = SelfRegistration::Approval;
 
     /// Charge la configuration depuis les variables d'environnement.
     static Config fromEnvironment();

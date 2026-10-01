@@ -130,8 +130,26 @@ a:hover { text-decoration-color: var(--ochre); }
 .entry__facts dd { font-family: var(--serif); font-size: 2rem; color: #fff; font-variant-numeric: tabular-nums; }
 .entry__foot { font-size: .78rem; color: var(--board-ink-2); max-width: 42ch; border-top: 1px solid var(--board-rule); padding-top: var(--s3); }
 
-.entry__paper { display: flex; align-items: center; justify-content: center; padding: var(--s6); }
+.entry__paper {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: var(--s6); overflow-y: auto;
+}
 .entry__form { width: 100%; max-width: 23rem; }
+
+/* Onglets du feuillet : un filet qui court sous les deux intitulés, épaissi
+   en ocre sous l'onglet courant. Pas de pilule, pas de fond coloré. */
+.entry__tabs {
+  display: flex; gap: var(--s5); width: 100%; max-width: 23rem;
+  margin-bottom: var(--s5); border-bottom: 1px solid var(--rule);
+}
+.entry__tab {
+  appearance: none; background: none; border: 0; cursor: pointer;
+  padding: 0 0 var(--s2); margin-bottom: -1px;
+  font: inherit; font-size: .84rem; color: var(--ink-3);
+  border-bottom: 2px solid transparent;
+}
+.entry__tab:hover { color: var(--ink); }
+.entry__tab.is-active { color: var(--ink); border-bottom-color: var(--ochre); }
 .entry__title { font-size: 1.9rem; }
 .entry__hint { color: var(--ink-2); margin: var(--s1) 0 var(--s5); }
 .entry__note {
@@ -335,6 +353,7 @@ input:focus, select:focus, textarea:focus {
 }
 input[aria-invalid="true"], select[aria-invalid="true"] { border-bottom-color: var(--red); }
 .field__error { display: block; color: var(--red); font-size: .76rem; margin-top: var(--s1); }
+.field__hint { display: block; color: var(--ink-3); font-size: .76rem; margin-top: var(--s1); }
 .field__help  { display: block; color: var(--ink-3); font-size: .76rem; margin-top: var(--s1); }
 select { appearance: none; background-image:
   linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),

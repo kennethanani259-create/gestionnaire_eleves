@@ -43,6 +43,58 @@ Toutes les erreurs d'un formulaire sont renvoyées **en une seule fois**.
 |---|---|---|
 | GET | `/api/health` | public |
 
+### Authentification et inscription
+
+| Méthode | Chemin                   | Accès  | Description                                  |
+| ------- | ------------------------ | ------ | -------------------------------------------- |
+| POST    | `/api/auth/login`        | public | Connexion, retourne un jeton JWT              |
+| GET     | `/api/auth/registration` | public | Politique d'inscription en vigueur            |
+| POST    | `/api/auth/register`     | public | Demande de compte (rôle `VIEWER` imposé)      |
+| GET     | `/api/auth/me`           | viewer | Profil de l'utilisateur connecté              |
+| POST    | `/api/auth/password`     | viewer | Changement de son propre mot de passe         |
+
+#### Demande de compte
+
+```http
+POST /api/auth/register
+Content-Type: application/json
+
+{
+  "username": "mme.koffi",
+  "email": "koffi@parents.local",
+  "password": "Rentree2026",
+  "full_name": "Adjoa Koffi"
+}
+```
+
+```json
+HTTP/1.1 201 Created
+{
+  "user": {
+    "id": 9, "username": "mme.koffi", "email": "koffi@parents.local",
+    "full_name": "Adjoa Koffi", "role": "VIEWER", "role_label": "Lecteur",
+    "is_active": false, "created_at": "2026-10-02 08:14:03"
+  },
+  "pending_approval": true,
+  "message": "Demande enregistree. Un administrateur doit valider votre compte avant la premiere connexion."
+}
+```
+
+Points de vigilance :
+
+- Les champs `role` et `is_active` présents dans la requête sont **ignorés** : le
+  serveur impose `VIEWER` et l'état défini par `APP_SELF_REGISTRATION`.
+- Mot de passe : 10 caractères minimum, lettres **et** chiffres, sinon `400` avec
+  `details.fields.password`.
+- Identifiant ou e-mail déjà utilisé : `400` avec le champ fautif.
+- Plus de 5 demandes en 15 minutes depuis la même adresse : `429 TOO_MANY_REQUESTS`.
+- Connexion sur un compte non validé : `403` (« Ce compte n'est pas encore actif »).
+- Si `APP_SELF_REGISTRATION=off` : `403`, et `GET /api/auth/registration` renvoie
+  `{"enabled": false}` pour que la page d'entrée masque l'onglet.
+
+La validation se fait ensuite par `PUT /api/users/{id}` avec `"is_active": true`
+(réservé aux administrateurs), ou le refus par `DELETE /api/users/{id}`.
+
 ### Élèves
 | Méthode | Chemin | Accès | Description |
 |---|---|---|---|

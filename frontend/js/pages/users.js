@@ -57,9 +57,37 @@
       }
     ];
 
-    return '<div class="notice notice--info">Les mots de passe sont stockés sous forme d\'empreinte ' +
+    return pendingView(users) +
+      '<div class="notice notice--info">Les mots de passe sont stockés sous forme d\'empreinte ' +
       'PBKDF2-SHA256 salée : ils ne peuvent jamais être relus, seulement réinitialisés.</div>' +
       '<div class="panel">' + UI.table(columns, users, { emptyTitle: 'Aucun utilisateur' }) + '</div>';
+  }
+
+  /** Comptes inactifs : demandes d'inscription en attente d'une décision. */
+  function pending(users) {
+    return (users || []).filter(function (u) { return !u.is_active; });
+  }
+
+  function pendingView(users) {
+    var waiting = pending(users);
+    if (!waiting.length) return '';
+
+    var rows = waiting.map(function (u) {
+      return '<li class="todo__item">' +
+        '<span><span class="strong">' + UI.esc(u.full_name || u.username) + '</span> ' +
+        '<span class="muted">' + UI.esc(u.username) + ' · ' + UI.esc(u.email || '—') + '</span>' +
+        '<span class="muted"> · demandé le ' + UI.date(u.created_at) + '</span></span>' +
+        '<span class="row-actions">' +
+        '<button class="btn btn--primary btn--sm" data-approve="' + u.id + '">Valider</button>' +
+        '<button class="btn btn--danger btn--sm" data-reject="' + u.id + '">Refuser</button>' +
+        '</span></li>';
+    }).join('');
+
+    return UI.panel('Demandes de compte en attente',
+      '<p class="lede">' + waiting.length + ' compte' + (waiting.length > 1 ? 's' : '') +
+      ' ne peu' + (waiting.length > 1 ? 'vent' : 't') + ' pas encore se connecter. ' +
+      'Valider ouvre un accès en consultation.</p>' +
+      '<ul class="todo">' + rows + '</ul>', { raw: true });
   }
 
   function bind(container, users) {
@@ -71,6 +99,35 @@
     container.querySelectorAll('[data-pwd]').forEach(function (btn) {
       btn.onclick = function () { openReset(find(btn.dataset.pwd)); };
     });
+    container.querySelectorAll('[data-approve]').forEach(function (btn) {
+      btn.onclick = function () {
+        var u = find(btn.dataset.approve);
+        btn.disabled = true;
+        Api.put('/api/users/' + u.id, {
+          username: u.username, email: u.email, full_name: u.full_name,
+          role: u.role, is_active: true
+        }).then(function () {
+          UI.success('Compte « ' + u.username + ' » validé.');
+          App.reload();
+        }).catch(function (err) { btn.disabled = false; UI.showError(err); });
+      };
+    });
+
+    container.querySelectorAll('[data-reject]').forEach(function (btn) {
+      btn.onclick = function () {
+        var u = find(btn.dataset.reject);
+        UI.confirm('Refuser la demande',
+          'Supprimer la demande de « ' + (u.full_name || u.username) + ' » ? ' +
+          'La personne devra en formuler une nouvelle.',
+          function () {
+            Api.del('/api/users/' + u.id).then(function () {
+              UI.success('Demande refusée.');
+              App.reload();
+            }).catch(UI.showError);
+          }, 'Refuser');
+      };
+    });
+
     container.querySelectorAll('[data-del]').forEach(function (btn) {
       btn.onclick = function () {
         var u = find(btn.dataset.del);

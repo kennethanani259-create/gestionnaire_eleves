@@ -3,6 +3,7 @@
 #include <doctest/doctest.h>
 
 #include "core/Error.hpp"
+#include "controllers/AuthController.hpp"
 #include "services/AuthService.hpp"
 #include "utils/Crypto.hpp"
 #include "utils/Jwt.hpp"
@@ -272,6 +273,79 @@ TEST_CASE("AuthService : echecs d'authentification") {
         f.auth.updateUser(user.id, user.username, user.email, user.fullName, user.role, false);
         CHECK_THROWS_AS(f.auth.login("admin", "MotDePasse123"), ForbiddenError);
     }
+}
+
+TEST_CASE("AuthService : inscription autonome selon la politique configuree") {
+    auto db = testing::makeTestDatabase();
+    UserRepository users{*db};
+
+    SUBCASE("mode 'approval' : compte cree mais inactif, role Consultation impose") {
+        AuthService auth{users, "secret-de-test-suffisamment-long", 60,
+                         SelfRegistration::Approval};
+        const auto result =
+            auth.selfRegister("parent", "parent@ecole.local", "MotDePasse123", "Parent");
+        CHECK(result.pendingApproval);
+        CHECK_FALSE(result.user.isActive);
+        CHECK(toString(result.user.role) == "VIEWER");
+        // La connexion reste impossible tant qu'un administrateur n'a pas valide.
+        CHECK_THROWS_AS(auth.login("parent", "MotDePasse123"), ForbiddenError);
+    }
+
+    SUBCASE("mode 'open' : le compte est utilisable immediatement") {
+        AuthService auth{users, "secret-de-test-suffisamment-long", 60, SelfRegistration::Open};
+        const auto result =
+            auth.selfRegister("libre", "libre@ecole.local", "MotDePasse123", "Libre");
+        CHECK_FALSE(result.pendingApproval);
+        CHECK(result.user.isActive);
+        CHECK(toString(result.user.role) == "VIEWER");
+        CHECK_NOTHROW(auth.login("libre", "MotDePasse123"));
+    }
+
+    SUBCASE("mode 'off' : toute demande est refusee") {
+        AuthService auth{users, "secret-de-test-suffisamment-long", 60, SelfRegistration::Off};
+        CHECK_THROWS_AS(
+            auth.selfRegister("refuse", "refuse@ecole.local", "MotDePasse123", "Refuse"),
+            ForbiddenError);
+    }
+
+    SUBCASE("exigences de robustesse du mot de passe") {
+        AuthService auth{users, "secret-de-test-suffisamment-long", 60, SelfRegistration::Open};
+        // Trop court.
+        CHECK_THROWS_AS(auth.selfRegister("court", "court@ecole.local", "Court12", "A"),
+                        ValidationError);
+        // Assez long mais sans chiffre.
+        CHECK_THROWS_AS(auth.selfRegister("sanschiffre", "sanschiffre@ecole.local", "motdepasselong", "B"),
+                        ValidationError);
+        // Assez long mais sans lettre.
+        CHECK_THROWS_AS(auth.selfRegister("sanslettre", "sanslettre@ecole.local", "1234567890", "C"),
+                        ValidationError);
+        // Mot de passe vide.
+        CHECK_THROWS_AS(auth.selfRegister("videmdp", "videmdp@ecole.local", "", "D"), ValidationError);
+        // Conforme.
+        CHECK_NOTHROW(auth.selfRegister("conforme", "conforme@ecole.local", "MotDePasse123", "E"));
+    }
+}
+
+TEST_CASE("AuthService : l'inscription ne peut pas usurper un compte existant") {
+    AuthFixture f;
+    // Un visiteur ne doit pas pouvoir reprendre l'identifiant de l'administrateur.
+    CHECK_THROWS_AS(f.auth.selfRegister("admin", "autre@ecole.local", "MotDePasse123", "Faux"),
+                    ValidationError);
+    CHECK_THROWS_AS(f.auth.selfRegister("autre", "admin@ecole.local", "MotDePasse123", "Faux"),
+                    ValidationError);
+    // Le compte administrateur est intact.
+    const auto admin = f.auth.login("admin", "MotDePasse123");
+    CHECK(toString(admin.user.role) == "ADMIN");
+}
+
+TEST_CASE("RegistrationThrottle : les demandes repetees sont bornees") {
+    RegistrationThrottle throttle(3, std::chrono::minutes(15));
+    CHECK_NOTHROW(throttle.check("10.0.0.1"));
+    CHECK_NOTHROW(throttle.check("10.0.0.1"));
+    CHECK_NOTHROW(throttle.check("10.0.0.1"));
+    CHECK_THROWS_AS(throttle.check("10.0.0.1"), AppException);
+    // Le quota est par adresse source : un autre client n'est pas penalise.
+    CHECK_NOTHROW(throttle.check("10.0.0.2"));
 }
 
 TEST_CASE("AuthService : hierarchie des roles") {

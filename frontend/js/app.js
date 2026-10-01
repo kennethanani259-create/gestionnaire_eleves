@@ -25,6 +25,7 @@
 
     start: function () {
       bindLogin();
+      bindRegister();
       bindShell();
       global.addEventListener('hashchange', function () { App.route(); });
 
@@ -47,6 +48,8 @@
       if (message) { box.textContent = message; box.hidden = false; }
       else { box.hidden = true; }
       document.getElementById('login-password').value = '';
+      // Toujours revenir sur le volet de connexion en sortie de session.
+      if (!document.getElementById('entry-tabs').hidden) selectEntryTab('login');
     },
 
     showApp: function () {
@@ -195,6 +198,117 @@
         .then(function () {
           button.disabled = false;
           button.textContent = 'Entrer';
+        });
+    });
+  }
+
+  /* --------------------------- Demande de compte --------------------------- */
+  var REGISTER_FIELDS = ['full_name', 'username', 'email', 'password', 'password_confirm'];
+
+  function clearRegisterErrors() {
+    REGISTER_FIELDS.forEach(function (name) {
+      var box = document.getElementById('register-error-' + name);
+      if (box) { box.textContent = ''; box.hidden = true; }
+      var input = document.querySelector('#register-form [name="' + name + '"]');
+      if (input) input.removeAttribute('aria-invalid');
+    });
+    document.getElementById('register-error').hidden = true;
+  }
+
+  function showRegisterFieldError(name, message) {
+    var box = document.getElementById('register-error-' + name);
+    var input = document.querySelector('#register-form [name="' + name + '"]');
+    if (box) { box.textContent = message; box.hidden = false; }
+    if (input) {
+      input.setAttribute('aria-invalid', 'true');
+      if (box) input.setAttribute('aria-describedby', box.id);
+    }
+    return input;
+  }
+
+  function selectEntryTab(which) {
+    var isLogin = which === 'login';
+    document.getElementById('login-form').hidden = !isLogin;
+    document.getElementById('register-form').hidden = isLogin;
+    [['tab-login', isLogin], ['tab-register', !isLogin]].forEach(function (pair) {
+      var tab = document.getElementById(pair[0]);
+      tab.classList.toggle('is-active', pair[1]);
+      tab.setAttribute('aria-selected', pair[1] ? 'true' : 'false');
+    });
+    var first = document.getElementById(isLogin ? 'login-username' : 'register-fullname');
+    if (first) first.focus();
+  }
+
+  function bindRegister() {
+    var tabs = document.getElementById('entry-tabs');
+
+    // Les onglets ne s'affichent que si le serveur accepte réellement les
+    // demandes : ne jamais proposer une porte fermée.
+    Api.registrationPolicy().then(function (policy) {
+      if (!policy || !policy.enabled) return;
+      tabs.hidden = false;
+      document.getElementById('register-policy').textContent = policy.requires_approval
+        ? 'La demande est transmise à la direction, qui l\'ouvre en consultation.'
+        : 'Votre compte en consultation sera utilisable dès l\'envoi.';
+    }).catch(function () { /* serveur muet : on garde la seule connexion */ });
+
+    document.getElementById('tab-login').onclick = function () { selectEntryTab('login'); };
+    document.getElementById('tab-register').onclick = function () { selectEntryTab('register'); };
+
+    var form = document.getElementById('register-form');
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      clearRegisterErrors();
+      document.getElementById('register-done').hidden = true;
+
+      var payload = {
+        full_name: document.getElementById('register-fullname').value.trim(),
+        username: document.getElementById('register-username').value.trim(),
+        email: document.getElementById('register-email').value.trim(),
+        password: document.getElementById('register-password').value
+      };
+      var confirm = document.getElementById('register-confirm').value;
+
+      // Seule vérification purement locale : la confirmation. Tout le reste est
+      // tranché par le serveur, qui reste la référence.
+      if (payload.password !== confirm) {
+        showRegisterFieldError('password_confirm', 'Les deux mots de passe diffèrent').focus();
+        return;
+      }
+
+      var button = document.getElementById('register-submit');
+      button.disabled = true;
+      button.textContent = 'Envoi…';
+
+      Api.register(payload)
+        .then(function (data) {
+          form.reset();
+          var done = document.getElementById('register-done');
+          done.textContent = data.message || 'Demande enregistrée.';
+          done.hidden = false;
+          if (!data.pending_approval) {
+            UI.success('Compte créé. Vous pouvez vous connecter.');
+            selectEntryTab('login');
+            document.getElementById('login-username').value = payload.username;
+            document.getElementById('login-password').focus();
+          }
+        })
+        .catch(function (err) {
+          var fields = err.fields || {};
+          var names = Object.keys(fields);
+          if (names.length) {
+            names.forEach(function (name) { showRegisterFieldError(name, fields[name]); });
+            var firstInput = document.querySelector('#register-form [aria-invalid="true"]');
+            if (firstInput) firstInput.focus();
+          } else {
+            var box = document.getElementById('register-error');
+            box.textContent = err.message || 'Demande impossible';
+            box.hidden = false;
+          }
+        })
+        .then(function () {
+          button.disabled = false;
+          button.textContent = 'Envoyer la demande';
         });
     });
   }

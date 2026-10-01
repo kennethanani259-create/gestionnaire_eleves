@@ -8,6 +8,19 @@ namespace app {
 namespace http = app::http;
 using middleware::CurrentUser;
 
+void RegistrationThrottle::check(const std::string& client) {
+    const auto now = std::chrono::steady_clock::now();
+    const std::lock_guard<std::mutex> lock(mutex_);
+    auto& hits = hits_[client];
+    while (!hits.empty() && now - hits.front() > window_) hits.pop_front();
+    if (hits.size() >= maxPerWindow_) {
+        throw AppException(429, "TOO_MANY_REQUESTS",
+                           "Trop de demandes de compte depuis cet appareil. "
+                           "Reessayez dans une quinzaine de minutes.");
+    }
+    hits.push_back(now);
+}
+
 void AuthController::registerRoutes(api::Router& router) {
     using api::Access;
 
@@ -20,6 +33,31 @@ void AuthController::registerRoutes(api::Router& router) {
                                              http::optionalString(body, "email"));
                     const std::string password = http::optionalString(body, "password");
                     http::sendJson(res, 200, auth_.login(identifier, password).toJson());
+                });
+
+    // GET /api/auth/registration — la page d'entree doit savoir si elle propose
+    // ou non un formulaire d'inscription. Public, et ne revele rien d'autre.
+    router.get(R"(/api/auth/registration)", Access::Public,
+               [this](const httplib::Request&, httplib::Response& res) {
+                   const auto mode = auth_.selfRegistrationMode();
+                   http::sendJson(res, 200,
+                                  {{"enabled", mode != SelfRegistration::Off},
+                                   {"mode", toString(mode)},
+                                   {"requires_approval", mode == SelfRegistration::Approval}});
+               });
+
+    // POST /api/auth/register — demande de compte (role Consultation impose)
+    router.post(R"(/api/auth/register)", Access::Public,
+                [this](const httplib::Request& req, httplib::Response& res) {
+                    throttle_.check(req.remote_addr);
+
+                    const auto body = http::parseBody(req);
+                    const auto result = auth_.selfRegister(
+                        http::optionalString(body, "username"),
+                        http::optionalString(body, "email"),
+                        http::optionalString(body, "password"),
+                        http::optionalString(body, "full_name"));
+                    http::sendJson(res, 201, result.toJson());
                 });
 
     // GET /api/auth/me — profil de l'utilisateur connecte

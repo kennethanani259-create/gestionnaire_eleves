@@ -1,5 +1,6 @@
 #include "core/Config.hpp"
 
+#include <cctype>
 #include <cstdlib>
 #include <fstream>
 #include <random>
@@ -50,6 +51,28 @@ std::string randomSecret() {
 
 }  // namespace
 
+SelfRegistration selfRegistrationFromString(const std::string& value) {
+    std::string v;
+    for (char c : value) v.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    if (v == "off" || v == "false" || v == "0" || v == "none") return SelfRegistration::Off;
+    if (v == "open" || v == "immediate") return SelfRegistration::Open;
+    if (v == "approval" || v == "true" || v == "1" || v == "moderated") {
+        return SelfRegistration::Approval;
+    }
+    LOG_WARN("config", "APP_SELF_REGISTRATION inconnu (" + value +
+                           ") : valeur 'approval' appliquee par defaut.");
+    return SelfRegistration::Approval;
+}
+
+std::string toString(SelfRegistration mode) {
+    switch (mode) {
+        case SelfRegistration::Off: return "off";
+        case SelfRegistration::Open: return "open";
+        case SelfRegistration::Approval: break;
+    }
+    return "approval";
+}
+
 void Config::loadDotEnv(const std::string& path) {
     std::ifstream in(path);
     if (!in) return;
@@ -86,6 +109,7 @@ Config Config::fromEnvironment() {
     cfg.threadPoolSize = envInt("APP_THREAD_POOL_SIZE", cfg.threadPoolSize);
     cfg.logLevel = logLevelFromString(envString("APP_LOG_LEVEL", "INFO"));
     cfg.logFile = envString("APP_LOG_FILE", "");
+    cfg.selfRegistration = selfRegistrationFromString(envString("APP_SELF_REGISTRATION", "approval"));
 
     cfg.jwtSecret = envString("APP_JWT_SECRET", "");
     if (cfg.jwtSecret.empty()) {

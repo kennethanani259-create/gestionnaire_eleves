@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Registre — gestion des élèves</title>
   <meta name="description" content="Tenue du registre scolaire : élèves, notes, présences, bulletins.">
-  <link rel="stylesheet" href="/css/styles.css?v=4">
+  <link rel="stylesheet" href="/css/styles.css?v=5">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='3' fill='%231d2e27'/><path d='M9 7h11a4 4 0 0 1 4 4v14H13a4 4 0 0 0-4 4z' fill='none' stroke='%23c8882f' stroke-width='2'/></svg>">
 </head>
 <body>
@@ -67,7 +67,16 @@
 
   <!-- Volet droit : le formulaire, sur papier. -->
   <main class="entry__paper">
-    <form class="entry__form" id="login-form" novalidate>
+    <!-- Deux volets du meme feuillet : on ne change pas de page pour demander
+         un compte, on tourne l'onglet. -->
+    <div class="entry__tabs" role="tablist" aria-label="Accès au registre" id="entry-tabs" hidden>
+      <button type="button" class="entry__tab is-active" id="tab-login"
+              role="tab" aria-selected="true" aria-controls="login-form">Se connecter</button>
+      <button type="button" class="entry__tab" id="tab-register"
+              role="tab" aria-selected="false" aria-controls="register-form">Demander un compte</button>
+    </div>
+
+    <form class="entry__form" id="login-form" novalidate role="tabpanel" aria-labelledby="tab-login">
       <h1 class="entry__title">Ouvrir le registre</h1>
       <p class="entry__hint">Identifiez-vous pour accéder à votre établissement.</p>
 
@@ -93,6 +102,63 @@
         Première mise en service&nbsp;? Le compte <code>admin</code> et son mot de
         passe provisoire sont inscrits dans le journal du serveur au premier
         démarrage.
+      </p>
+    </form>
+
+    <form class="entry__form" id="register-form" novalidate hidden
+          role="tabpanel" aria-labelledby="tab-register">
+      <h1 class="entry__title">Demander un compte</h1>
+      <p class="entry__hint" id="register-policy">
+        La demande est transmise à la direction, qui l'ouvre en consultation.
+      </p>
+
+      <div class="field">
+        <label for="register-fullname">Nom et prénom</label>
+        <input id="register-fullname" name="full_name" type="text"
+               autocomplete="name" required>
+        <p class="field__error" id="register-error-full_name" hidden></p>
+      </div>
+
+      <div class="field">
+        <label for="register-username">Identifiant souhaité</label>
+        <input id="register-username" name="username" type="text" autocomplete="username"
+               autocapitalize="none" spellcheck="false" required>
+        <p class="field__hint">Au moins 3 caractères, sans espace.</p>
+        <p class="field__error" id="register-error-username" hidden></p>
+      </div>
+
+      <div class="field">
+        <label for="register-email">Adresse e-mail</label>
+        <input id="register-email" name="email" type="email" autocomplete="email"
+               autocapitalize="none" spellcheck="false" required>
+        <p class="field__error" id="register-error-email" hidden></p>
+      </div>
+
+      <div class="field">
+        <label for="register-password">Mot de passe</label>
+        <input id="register-password" name="password" type="password"
+               autocomplete="new-password" required>
+        <p class="field__hint">Au moins 10 caractères, lettres et chiffres mêlés.</p>
+        <p class="field__error" id="register-error-password" hidden></p>
+      </div>
+
+      <div class="field">
+        <label for="register-confirm">Confirmer le mot de passe</label>
+        <input id="register-confirm" name="password_confirm" type="password"
+               autocomplete="new-password" required>
+        <p class="field__error" id="register-error-password_confirm" hidden></p>
+      </div>
+
+      <p id="register-error" class="notice notice--error" role="alert" hidden></p>
+      <p id="register-done" class="notice notice--ok" role="status" hidden></p>
+
+      <button type="submit" class="btn btn--primary btn--full" id="register-submit">
+        Envoyer la demande
+      </button>
+
+      <p class="entry__note">
+        Un compte ouvert par cette voie donne un accès en <strong>consultation</strong>.
+        Les droits de saisie et d'administration sont attribués par la direction.
       </p>
     </form>
   </main>
@@ -174,19 +240,19 @@
 
 <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 
-<script src="/js/api.js?v=4"></script>
-<script src="/js/ui.js?v=4"></script>
-<script src="/js/charts.js?v=4"></script>
-<script src="/js/pages/dashboard.js?v=4"></script>
-<script src="/js/pages/students.js?v=4"></script>
-<script src="/js/pages/classes.js?v=4"></script>
-<script src="/js/pages/subjects.js?v=4"></script>
-<script src="/js/pages/grades.js?v=4"></script>
-<script src="/js/pages/attendance.js?v=4"></script>
-<script src="/js/pages/results.js?v=4"></script>
-<script src="/js/pages/reports.js?v=4"></script>
-<script src="/js/pages/users.js?v=4"></script>
-<script src="/js/pages/settings.js?v=4"></script>
-<script src="/js/app.js?v=4"></script>
+<script src="/js/api.js?v=5"></script>
+<script src="/js/ui.js?v=5"></script>
+<script src="/js/charts.js?v=5"></script>
+<script src="/js/pages/dashboard.js?v=5"></script>
+<script src="/js/pages/students.js?v=5"></script>
+<script src="/js/pages/classes.js?v=5"></script>
+<script src="/js/pages/subjects.js?v=5"></script>
+<script src="/js/pages/grades.js?v=5"></script>
+<script src="/js/pages/attendance.js?v=5"></script>
+<script src="/js/pages/results.js?v=5"></script>
+<script src="/js/pages/reports.js?v=5"></script>
+<script src="/js/pages/users.js?v=5"></script>
+<script src="/js/pages/settings.js?v=5"></script>
+<script src="/js/app.js?v=5"></script>
 </body>
 </html>
