@@ -3,6 +3,7 @@
 #include <sstream>
 
 #include "core/Error.hpp"
+#include "core/Tenant.hpp"
 
 namespace app {
 namespace {
@@ -81,14 +82,15 @@ void GradeRepository::update(const Grade& value) {
 
 bool GradeRepository::remove(long long id) {
     auto lock = db_.lockGuard();
-    auto stmt = db_.prepare("DELETE FROM grades WHERE id=?;");
+    auto stmt = db_.prepare(std::string("DELETE FROM grades WHERE id=? ") +
+                            tenant::filterVia("grades.student_id", "students") + ";");
     stmt.bindAll(id);
     stmt.execute();
     return db_.changes() > 0;
 }
 
 std::optional<Grade> GradeRepository::findById(long long id) {
-    auto stmt = db_.prepare(std::string(kSelect) + "WHERE g.id=?;");
+    auto stmt = db_.prepare(std::string(kSelect) + "WHERE g.id=? " + tenant::filterVia("g.student_id", "students") + ";");
     stmt.bindAll(id);
     if (!stmt.step()) return std::nullopt;
     return mapRow(stmt);
@@ -96,7 +98,7 @@ std::optional<Grade> GradeRepository::findById(long long id) {
 
 std::vector<Grade> GradeRepository::find(const GradeFilter& filter) {
     std::ostringstream sql;
-    sql << kSelect << "WHERE 1=1 ";
+    sql << kSelect << "WHERE 1=1 " << tenant::filterVia("g.student_id", "students");
     if (filter.studentId.has_value()) sql << "AND g.student_id = ? ";
     if (filter.subjectId.has_value()) sql << "AND g.subject_id = ? ";
     if (filter.classId.has_value()) sql << "AND sb.class_id = ? ";
@@ -125,7 +127,7 @@ std::vector<Grade> GradeRepository::find(const GradeFilter& filter) {
 std::vector<SubjectAverageRow> GradeRepository::subjectAverages(long long studentId,
                                                                 std::optional<int> term) {
     std::ostringstream sql;
-    sql << kAverageSelect << "WHERE g.student_id = ? ";
+    sql << kAverageSelect << "WHERE g.student_id = ? " << tenant::filterVia("g.student_id", "students");
     if (term.has_value()) sql << "AND g.term = ? ";
     sql << "GROUP BY g.student_id, g.subject_id ORDER BY sb.name;";
 
@@ -142,7 +144,7 @@ std::vector<SubjectAverageRow> GradeRepository::subjectAverages(long long studen
 std::vector<SubjectAverageRow> GradeRepository::classSubjectAverages(long long classId,
                                                                      std::optional<int> term) {
     std::ostringstream sql;
-    sql << kAverageSelect << "WHERE sb.class_id = ? ";
+    sql << kAverageSelect << "WHERE sb.class_id = ? " << tenant::filterVia("g.student_id", "students");
     if (term.has_value()) sql << "AND g.term = ? ";
     sql << "GROUP BY g.student_id, g.subject_id ORDER BY g.student_id, sb.name;";
 

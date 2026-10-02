@@ -135,6 +135,7 @@ std::string toString(UserRole value) {
     switch (value) {
         case UserRole::Admin: return "ADMIN";
         case UserRole::Teacher: return "TEACHER";
+        case UserRole::Parent: return "PARENT";
         case UserRole::Viewer: return "VIEWER";
     }
     return "VIEWER";
@@ -144,6 +145,7 @@ UserRole parseUserRole(const std::string& value) {
     const std::string v = upper(value);
     if (v == "ADMIN" || v == "ADMINISTRATEUR") return UserRole::Admin;
     if (v == "TEACHER" || v == "ENSEIGNANT") return UserRole::Teacher;
+    if (v == "PARENT") return UserRole::Parent;
     if (v == "VIEWER" || v == "CONSULTATION") return UserRole::Viewer;
     unknown("Role", value, "ADMIN, TEACHER, VIEWER");
 }
@@ -152,15 +154,19 @@ std::string label(UserRole value) {
     switch (value) {
         case UserRole::Admin: return "Administrateur";
         case UserRole::Teacher: return "Enseignant";
+        case UserRole::Parent: return "Parent";
         case UserRole::Viewer: return "Consultation";
     }
     return "Consultation";
 }
 
+bool isParentRole(UserRole role) { return role == UserRole::Parent; }
+
 int privilegeLevel(UserRole role) {
     switch (role) {
         case UserRole::Admin: return 2;
         case UserRole::Teacher: return 1;
+        case UserRole::Parent: return -1;
         case UserRole::Viewer: return 0;
     }
     return 0;

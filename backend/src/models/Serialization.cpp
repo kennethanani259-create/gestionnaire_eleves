@@ -14,6 +14,7 @@
 #include "models/Student.hpp"
 #include "models/Subject.hpp"
 #include "models/Teacher.hpp"
+#include "models/School.hpp"
 #include "models/User.hpp"
 
 namespace app {
@@ -159,6 +160,31 @@ nlohmann::json User::toJson() const {
                      {"created_at", createdAt},
                      {"updated_at", updatedAt}};
     put(j, "last_login_at", lastLoginAt);
+    put(j, "school_id", schoolId);
+    return j;
+}
+
+// ----------------------------------------------------------------- School
+nlohmann::json School::toJson() const {
+    nlohmann::json j{{"id", id},
+                     {"code", code},
+                     {"name", name},
+                     {"is_active", isActive},
+                     {"created_at", createdAt},
+                     {"updated_at", updatedAt}};
+    put(j, "city", city);
+    put(j, "country", country);
+    put(j, "phone", phone);
+    put(j, "email", email);
+    put(j, "address", address);
+    return j;
+}
+
+nlohmann::json School::toPublicJson() const {
+    // Volontairement minimal : le matricule n'est pas renvoye (celui qui
+    // interroge le connait deja) et aucune coordonnee n'est exposee.
+    nlohmann::json j{{"id", id}, {"name", name}};
+    put(j, "city", city);
     return j;
 }
 

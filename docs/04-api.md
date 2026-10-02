@@ -49,19 +49,38 @@ Toutes les erreurs d'un formulaire sont renvoyées **en une seule fois**.
 | ------- | ------------------------ | ------ | -------------------------------------------- |
 | POST    | `/api/auth/login`        | public | Connexion, retourne un jeton JWT              |
 | GET     | `/api/auth/registration` | public | Politique d'inscription en vigueur            |
-| POST    | `/api/auth/register`     | public | Demande de compte (rôle `VIEWER` imposé)      |
-| GET     | `/api/auth/me`           | viewer | Profil de l'utilisateur connecté              |
-| POST    | `/api/auth/password`     | viewer | Changement de son propre mot de passe         |
+| POST    | `/api/auth/register`     | public | Inscription : créer une école ou en rejoindre une |
+| GET     | `/api/auth/schools/{code}` | public | Établissement correspondant à un matricule (nom et ville seuls) |
+| GET     | `/api/auth/me`           | *connecté* | Profil de l'utilisateur connecté          |
+| POST    | `/api/auth/password`     | *connecté* | Changement de son propre mot de passe     |
+| GET     | `/api/school`            | *connecté* | Son établissement (matricule visible des seuls administrateurs) |
+| POST    | `/api/school/code`       | admin  | Renouvelle le matricule de l'établissement    |
 
-#### Demande de compte
+> *connecté* = toute session valide, **y compris un parent**, qui n'atteint
+> aucune des routes marquées « viewer ».
+
+#### Connexion avec vérification du rôle
+
+```http
+POST /api/auth/login
+{ "username": "prof", "password": "Demo1234!", "role": "TEACHER" }
+```
+
+Le champ `role` est facultatif. S'il est fourni et que le compte ne le porte
+pas, la réponse est `403` et **aucun jeton n'est délivré** : ce paramètre sert à
+vérifier, jamais à accorder un privilège.
+
+#### Inscription — parcours 1 : créer son établissement
 
 ```http
 POST /api/auth/register
 Content-Type: application/json
 
 {
-  "username": "mme.koffi",
-  "email": "koffi@parents.local",
+  "school_name": "College Les Palmiers",
+  "school_city": "Cotonou",
+  "username": "direction",
+  "email": "direction@palmiers.bj",
   "password": "Rentree2026",
   "full_name": "Adjoa Koffi"
 }
@@ -71,29 +90,79 @@ Content-Type: application/json
 HTTP/1.1 201 Created
 {
   "user": {
-    "id": 9, "username": "mme.koffi", "email": "koffi@parents.local",
-    "full_name": "Adjoa Koffi", "role": "VIEWER", "role_label": "Lecteur",
-    "is_active": false, "created_at": "2026-10-02 08:14:03"
+    "id": 9, "username": "direction", "email": "direction@palmiers.bj",
+    "full_name": "Adjoa Koffi", "role": "ADMIN", "role_label": "Administrateur",
+    "is_active": true, "school_id": 3, "created_at": "2026-10-02 08:14:03"
   },
-  "pending_approval": true,
-  "message": "Demande enregistree. Un administrateur doit valider votre compte avant la premiere connexion."
+  "school": { "id": 3, "name": "College Les Palmiers", "city": "Cotonou" },
+  "pending_approval": false,
+  "message": "Compte cree. Vous pouvez vous connecter."
+}
+```
+
+Le fondateur est administrateur de **sa seule** école, et son registre est vide.
+Le matricule n'apparaît pas dans cette réponse publique : il se lit ensuite via
+`GET /api/school`.
+
+#### Inscription — parcours 2 : rejoindre un établissement
+
+```http
+POST /api/auth/register
+{
+  "school_code": "KEGSRD6X",
+  "role": "PARENT",
+  "username": "mme.koffi",
+  "email": "koffi@parents.local",
+  "password": "Rentree2026",
+  "full_name": "Adjoa Koffi"
 }
 ```
 
 Points de vigilance :
 
-- Les champs `role` et `is_active` présents dans la requête sont **ignorés** : le
-  serveur impose `VIEWER` et l'état défini par `APP_SELF_REGISTRATION`.
+- Ni `school_name` ni `school_code` : `400` avec `details.fields.school_code`.
+- Matricule inconnu : `400`. La casse est indifférente.
+- `role` accepté : `TEACHER`, `PARENT`, `VIEWER` (défaut `VIEWER`).
+  **`ADMIN` est refusé par `403`** — seul un administrateur en place promeut.
+- `is_active` envoyé par le client est **ignoré** : l'état dépend de
+  `APP_SELF_REGISTRATION` (`open` par défaut, donc actif immédiatement).
 - Mot de passe : 10 caractères minimum, lettres **et** chiffres, sinon `400` avec
   `details.fields.password`.
 - Identifiant ou e-mail déjà utilisé : `400` avec le champ fautif.
 - Plus de 5 demandes en 15 minutes depuis la même adresse : `429 TOO_MANY_REQUESTS`.
-- Connexion sur un compte non validé : `403` (« Ce compte n'est pas encore actif »).
+- Connexion sur un compte non validé (mode `approval`) : `403`.
 - Si `APP_SELF_REGISTRATION=off` : `403`, et `GET /api/auth/registration` renvoie
   `{"enabled": false}` pour que la page d'entrée masque l'onglet.
 
-La validation se fait ensuite par `PUT /api/users/{id}` avec `"is_active": true`
-(réservé aux administrateurs), ou le refus par `DELETE /api/users/{id}`.
+En mode `approval`, la validation se fait par `PUT /api/users/{id}` avec
+`"is_active": true` (réservé aux administrateurs), ou le refus par
+`DELETE /api/users/{id}`.
+
+### Espace parent
+
+| Méthode | Chemin | Accès | Description |
+| --- | --- | --- | --- |
+| GET | `/api/parent/children` | *connecté* | Les élèves rattachés à mon compte |
+| GET | `/api/parent/children/{id}/results` | *connecté* | Bulletin de mon enfant |
+| GET | `/api/parent/children/{id}/grades` | *connecté* | Ses notes (`?term=`) |
+| GET | `/api/parent/children/{id}/attendance` | *connecté* | Ses présences (`?from=&to=`) |
+| GET | `/api/users/{id}/children` | admin | Enfants rattachés à un compte parent |
+| POST | `/api/users/{id}/children` | admin | Rattacher un élève (`{"student_id": 12, "relation": "Mere"}`) |
+| DELETE | `/api/users/{id}/children/{studentId}` | admin | Retirer un rattachement |
+
+Chaque route `/api/parent/children/{id}/…` vérifie le lien de filiation avant
+toute lecture. Un identifiant d'élève non rattaché renvoie **`404`** et non
+`403` : un parent n'a pas à apprendre qu'un élève existe ailleurs dans
+l'établissement. Les enveloppes sont identiques à celles des routes
+`/api/students/{id}/…`, afin que le même code d'affichage les consomme.
+
+### Cloisonnement des établissements
+
+Toute route authentifiée est filtrée par l'établissement du porteur du jeton :
+listes, recherches, agrégats du tableau de bord et accès par identifiant. Un
+élève, une classe ou un compte d'une autre école est traité comme inexistant
+(`404`). Aucun paramètre de requête ne permet de changer d'établissement : la
+portée vient du jeton, jamais du client.
 
 ### Élèves
 | Méthode | Chemin | Accès | Description |

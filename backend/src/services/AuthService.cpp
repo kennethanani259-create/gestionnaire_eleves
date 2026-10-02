@@ -4,6 +4,7 @@
 
 #include "core/Error.hpp"
 #include "core/Logger.hpp"
+#include "core/Tenant.hpp"
 #include "utils/Crypto.hpp"
 #include "utils/Validator.hpp"
 
@@ -15,12 +16,15 @@ nlohmann::json AuthResult::toJson() const {
 }
 
 nlohmann::json RegistrationResult::toJson() const {
-    return {{"user", user.toJson()},
+    nlohmann::json j =
+           {{"user", user.toJson()},
             {"pending_approval", pendingApproval},
             {"message", pendingApproval
                             ? std::string("Demande enregistree. Un administrateur doit valider "
                                           "votre compte avant la premiere connexion.")
                             : std::string("Compte cree. Vous pouvez vous connecter.")}};
+    if (school.has_value()) j["school"] = school->toPublicJson();
+    return j;
 }
 
 void AuthService::requireRole(UserRole actual, UserRole required) {
@@ -30,7 +34,32 @@ void AuthService::requireRole(UserRole actual, UserRole required) {
     }
 }
 
-AuthResult AuthService::login(const std::string& identifier, const std::string& password) {
+std::optional<School> AuthService::schoolOf(const User& user) {
+    if (!user.schoolId.has_value()) return std::nullopt;
+    // Lecture hors portee : a cet instant la portee n'est pas encore posee.
+    tenant::SystemScope systemScope;
+    return schools_.findById(*user.schoolId);
+}
+
+std::optional<School> AuthService::schoolByCode(const std::string& code) {
+    tenant::SystemScope systemScope;
+    return schools_.findByCode(code);
+}
+
+School AuthService::regenerateSchoolCode(const User& admin) {
+    if (!admin.schoolId.has_value()) throw NotFoundError("Aucun etablissement rattache");
+    tenant::SystemScope systemScope;
+    auto school = schools_.findById(*admin.schoolId);
+    if (!school.has_value()) throw NotFoundError("Etablissement", *admin.schoolId);
+    school->code = schools_.generateCode();
+    schools_.update(*school);
+    LOG_WARN("auth", "Matricule regenere pour l'etablissement " + school->name +
+                         " par " + admin.username);
+    return *school;
+}
+
+AuthResult AuthService::login(const std::string& identifier, const std::string& password,
+                              std::optional<UserRole> expectedRole) {
     if (identifier.empty() || password.empty()) {
         throw ValidationError("Identifiant et mot de passe obligatoires");
     }
@@ -56,6 +85,16 @@ AuthResult AuthService::login(const std::string& identifier, const std::string& 
         LOG_WARN("auth", "Tentative de connexion sur un compte desactive: " + user->username);
         throw ForbiddenError(
             "Ce compte n'est pas encore actif. Un administrateur doit le valider.");
+    }
+
+    // Le role choisi a l'ecran doit correspondre au compte. Ce controle ne
+    // peut qu'interdire une connexion, jamais elargir des droits : le role
+    // effectif reste celui enregistre en base.
+    if (expectedRole.has_value() && *expectedRole != user->role) {
+        LOG_WARN("auth", "Role attendu " + toString(*expectedRole) + " mais le compte " +
+                             user->username + " est " + toString(user->role));
+        throw ForbiddenError("Ce compte n'est pas un compte " + label(*expectedRole) +
+                             ". Choisissez " + label(user->role) + " pour vous connecter.");
     }
 
     users_.touchLastLogin(user->id);
@@ -126,39 +165,106 @@ void AuthService::validatePasswordStrength(Validator& validator, const std::stri
     }
 }
 
-RegistrationResult AuthService::selfRegister(const std::string& username, const std::string& email,
-                                             const std::string& password,
-                                             const std::string& fullName) {
+RegistrationResult AuthService::registerSchool(const std::string& schoolName,
+                                               const std::optional<std::string>& city,
+                                               const std::string& username,
+                                               const std::string& email,
+                                               const std::string& password,
+                                               const std::string& fullName) {
     if (selfRegistration_ == SelfRegistration::Off) {
-        throw ForbiddenError(
-            "La creation de compte en ligne est desactivee sur cet etablissement. "
-            "Adressez-vous a l'administrateur du registre.");
+        throw ForbiddenError("La creation d'etablissement en ligne est desactivee sur ce serveur.");
     }
 
-    // Les regles communes d'abord (unicite, format), puis la robustesse du mot de passe.
-    validateCredentials(username, email, password, fullName, std::nullopt);
+    // La creation d'ecole se fait hors portee : rien n'existe encore.
+    tenant::SystemScope systemScope;
+
     Validator validator;
-    validator.required("password", password);
-    if (!password.empty()) validatePasswordStrength(validator, password);
+    validator.required("school_name", schoolName).maxLength("school_name", schoolName, 150);
     validator.throwIfInvalid();
 
+    validateCredentials(username, email, password, fullName, std::nullopt);
+    Validator pwd;
+    pwd.required("password", password);
+    if (!password.empty()) validatePasswordStrength(pwd, password);
+    pwd.throwIfInvalid();
+
+    School school;
+    school.code = schools_.generateCode();
+    school.name = schoolName;
+    school.city = city;
+    const long long schoolId = schools_.create(school);
+    school.id = schoolId;
+
     User user;
+    user.schoolId = schoolId;
     user.username = username;
     user.email = email;
     user.passwordHash = crypto::hashPassword(password);
     user.fullName = fullName;
-    // Impose, jamais lu depuis la requete : une inscription publique ne peut pas
-    // s'octroyer un role d'ecriture.
-    user.role = UserRole::Viewer;
+    // Fondateur de l'etablissement : administrateur de SON ecole, et d'elle seule.
+    user.role = UserRole::Admin;
+    user.isActive = true;
+    const long long userId = users_.create(user);
+
+    LOG_INFO("auth", "Etablissement cree: " + schoolName + " (matricule " + school.code +
+                         ") par " + username);
+
+    RegistrationResult result;
+    result.user = *users_.findById(userId);
+    result.pendingApproval = false;
+    result.school = school;
+    return result;
+}
+
+RegistrationResult AuthService::joinSchool(const std::string& code, UserRole role,
+                                           const std::string& username, const std::string& email,
+                                           const std::string& password,
+                                           const std::string& fullName) {
+    if (selfRegistration_ == SelfRegistration::Off) {
+        throw ForbiddenError(
+            "Les inscriptions en ligne sont desactivees. "
+            "Adressez-vous a l'administration de l'etablissement.");
+    }
+    // Un matricule ne confere jamais les pleins pouvoirs sur une ecole
+    // existante : seul le fondateur, ou un administrateur deja en place,
+    // peut accorder ce role.
+    if (role == UserRole::Admin) {
+        throw ForbiddenError(
+            "Le role d'administrateur ne s'obtient pas avec un matricule. "
+            "Demandez a l'administration de l'etablissement de vous l'accorder.");
+    }
+
+    tenant::SystemScope systemScope;
+
+    const auto school = schools_.findByCode(code);
+    if (!school.has_value() || !school->isActive) {
+        throw ValidationError("Matricule d'etablissement inconnu",
+                              {{"fields", {{"school_code", "Aucun etablissement avec ce matricule"}}}});
+    }
+
+    validateCredentials(username, email, password, fullName, std::nullopt);
+    Validator pwd;
+    pwd.required("password", password);
+    if (!password.empty()) validatePasswordStrength(pwd, password);
+    pwd.throwIfInvalid();
+
+    User user;
+    user.schoolId = school->id;
+    user.username = username;
+    user.email = email;
+    user.passwordHash = crypto::hashPassword(password);
+    user.fullName = fullName;
+    user.role = role;
     user.isActive = (selfRegistration_ == SelfRegistration::Open);
 
     const long long id = users_.create(user);
-    LOG_INFO("auth", std::string("Inscription publique: ") + username +
-                         (user.isActive ? " (active)" : " (en attente de validation)"));
+    LOG_INFO("auth", "Inscription dans " + school->name + ": " + username + " (" +
+                         toString(role) + (user.isActive ? ", active)" : ", en attente)"));
 
     RegistrationResult result;
-    result.user = getUser(id);
+    result.user = *users_.findById(id);
     result.pendingApproval = !user.isActive;
+    result.school = school;
     return result;
 }
 
@@ -178,6 +284,8 @@ User AuthService::createUser(const std::string& username, const std::string& ema
     user.fullName = fullName;
     user.role = role;
     user.isActive = true;
+    // Rattachement implicite a l'etablissement de l'administrateur courant.
+    user.schoolId = tenant::currentSchool();
 
     const long long id = users_.create(user);
     LOG_INFO("auth", "Compte cree: " + username + " (" + toString(role) + ")");
@@ -258,7 +366,26 @@ User AuthService::getUser(long long id) {
 }
 
 std::optional<std::string> AuthService::ensureInitialAdmin() {
+    // Amorcage : aucun compte n'existe encore, donc aucune portee n'est posee.
+    tenant::SystemScope systemScope;
     if (users_.count() > 0) return std::nullopt;
+
+    // Tout compte appartient a un etablissement : si la base est vierge, on
+    // en cree un pour accueillir l'administrateur initial. Les autres ecoles
+    // se creent ensuite depuis la page d'inscription.
+    long long schoolId = 0;
+    std::string schoolCode;
+    auto existing = schools_.findAll();
+    if (existing.empty()) {
+        School school;
+        school.code = schools_.generateCode();
+        school.name = "Mon etablissement";
+        schoolId = schools_.create(school);
+        schoolCode = school.code;
+    } else {
+        schoolId = existing.front().id;
+        schoolCode = existing.front().code;
+    }
 
     // Mot de passe initial aleatoire, affiche une seule fois dans les logs.
     const std::string password = crypto::toHex(crypto::randomBytes(9));
@@ -269,12 +396,15 @@ std::optional<std::string> AuthService::ensureInitialAdmin() {
     admin.fullName = "Administrateur";
     admin.role = UserRole::Admin;
     admin.isActive = true;
+    admin.schoolId = schoolId;
     users_.create(admin);
 
     LOG_WARN("auth", "=====================================================");
     LOG_WARN("auth", " Compte administrateur initial cree");
     LOG_WARN("auth", "   identifiant : admin");
     LOG_WARN("auth", "   mot de passe: " + password);
+    LOG_WARN("auth", "   etablissement: Mon etablissement");
+    LOG_WARN("auth", "   matricule    : " + schoolCode);
     LOG_WARN("auth", " Changez-le des la premiere connexion.");
     LOG_WARN("auth", "=====================================================");
     return password;

@@ -8,16 +8,36 @@
       return Promise.all([
         Api.me(),
         Api.get('/api/school-years').catch(function () { return { items: [] }; }),
-        Api.get('/api/health').catch(function () { return null; })
+        Api.get('/api/health').catch(function () { return null; }),
+        Api.school().catch(function () { return null; })
       ]).then(function (r) {
-        container.innerHTML = view(r[0], r[1].items || [], r[2]);
+        container.innerHTML = view(r[0], r[1].items || [], r[2], r[3]);
         bind(container);
       });
     }
   };
 
-  function view(user, years, health) {
+  function view(user, years, health, school) {
     var html = '<div class="columns">';
+
+    if (school) {
+      // Le matricule n'est renvoyé qu'aux administrateurs : il sert de clé
+      // d'entrée dans l'établissement, on le traite comme un secret partagé.
+      html += '<div class="panel"><div class="panel__head"><h2> Mon établissement</h2></div>' +
+        '<div class="panel__body"><div class="record">' +
+        item('Nom', school.name) +
+        item('Ville', school.city) +
+        (school.code ? '<div><p class="record__k">Matricule</p>' +
+          '<p class="record__v"><code class="code-strong">' + UI.esc(school.code) + '</code></p></div>' : '') +
+        '</div>' +
+        (school.code
+          ? '<p class="hint">Communiquez ce matricule aux enseignants et aux parents pour ' +
+            "qu'ils rejoignent l'établissement depuis la page d'accueil. " +
+            'Renouvelez-le si vous pensez qu\'il circule trop largement.</p>' +
+            '<button class="btn" id="school-code-new">Renouveler le matricule</button>'
+          : '') +
+        '</div></div>';
+    }
 
     html += '<div class="panel"><div class="panel__head"><h2> Mon profil</h2></div>' +
       '<div class="panel__body"><div class="record">' +
@@ -71,6 +91,21 @@
   }
 
   function bind(container) {
+    var regen = container.querySelector('#school-code-new');
+    if (regen) {
+      regen.onclick = function () {
+        UI.confirm('Renouveler le matricule ?',
+          "L'ancien matricule cessera immédiatement de fonctionner. " +
+          'Les comptes déjà inscrits ne sont pas affectés.',
+          function () {
+            Api.post('/api/school/code', {}).then(function (school) {
+              UI.success('Nouveau matricule : ' + school.code);
+              App.reload();
+            }).catch(UI.showError);
+          });
+      };
+    }
+
     container.querySelector('#pwd-submit').onclick = function () {
       var form = document.getElementById('pwd-form');
       var data = UI.readForm(form);

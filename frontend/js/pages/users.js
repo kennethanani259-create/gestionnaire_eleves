@@ -6,9 +6,10 @@
   var ROLES = [
     { value: 'ADMIN', label: 'Administrateur' },
     { value: 'TEACHER', label: 'Enseignant' },
+    { value: 'PARENT', label: "Parent d'élève" },
     { value: 'VIEWER', label: 'Lecteur' }
   ];
-  var ROLE_TAG = { ADMIN: 'bad', TEACHER: 'mark', VIEWER: 'neutral' };
+  var ROLE_TAG = { ADMIN: 'bad', TEACHER: 'mark', PARENT: 'good', VIEWER: 'neutral' };
 
   global.Pages.users = {
     render: function (container) {
@@ -50,6 +51,10 @@
           return '<div class="row-actions">' +
             '<button class="btn btn--sm" data-edit="' + u.id + '">' + UI.icon('edit') + '</button>' +
             '<button class="btn btn--sm" data-pwd="' + u.id + '">' + UI.icon('key') + '</button>' +
+            (u.role === 'PARENT'
+              ? '<button class="btn btn--sm" data-children="' + u.id + '" ' +
+                'title="Enfants rattachés">' + UI.icon('students') + '</button>'
+              : '') +
             (String(u.id) === String(me.id) ? '' :
               '<button class="btn btn--danger btn--sm" data-del="' + u.id + '">' + UI.icon('trash') + '</button>') +
             '</div>';
@@ -98,6 +103,9 @@
     });
     container.querySelectorAll('[data-pwd]').forEach(function (btn) {
       btn.onclick = function () { openReset(find(btn.dataset.pwd)); };
+    });
+    container.querySelectorAll('[data-children]').forEach(function (btn) {
+      btn.onclick = function () { openChildren(find(btn.dataset.children)); };
     });
     container.querySelectorAll('[data-approve]').forEach(function (btn) {
       btn.onclick = function () {
@@ -191,6 +199,81 @@
         }
       ]
     });
+  }
+
+  /**
+   * Rattachement des enfants à un compte parent. Sans ce lien, un parent
+   * connecté ne voit rien : c'est l'unique porte d'entrée vers ses élèves.
+   */
+  function openChildren(parent) {
+    if (!parent) return;
+    Promise.all([
+      Api.get('/api/users/' + parent.id + '/children'),
+      Api.get('/api/students', { limit: 500 })
+    ]).then(function (r) {
+      var linked = r[0].items || [];
+      var all = r[1].items || [];
+      var linkedIds = linked.map(function (c) { return String(c.id); });
+      var available = all.filter(function (st) {
+        return linkedIds.indexOf(String(st.id)) === -1;
+      });
+
+      var body =
+        (linked.length
+          ? '<ul class="linklist">' + linked.map(function (c) {
+              return '<li><span>' + UI.esc(c.full_name) + ' <span class="muted">· ' +
+                UI.esc(c.class_name || 'sans classe') + '</span></span>' +
+                '<button class="btn btn--danger btn--sm" data-unlink="' + c.id + '">Retirer</button></li>';
+            }).join('') + '</ul>'
+          : '<p class="muted">Aucun enfant rattaché pour le moment.</p>') +
+        '<div class="field"><label for="child-add">Rattacher un élève</label>' +
+        '<select id="child-add"><option value="">— choisir un élève —</option>' +
+        available.map(function (st) {
+          return '<option value="' + st.id + '">' + UI.esc(st.full_name) +
+            (st.class_name ? ' (' + UI.esc(st.class_name) + ')' : '') + '</option>';
+        }).join('') + '</select></div>' +
+        '<div class="field"><label for="child-relation">Lien de parenté ' +
+        '<span class="muted">(facultatif)</span></label>' +
+        '<input id="child-relation" type="text" placeholder="Mère, Père, Tuteur…"></div>';
+
+      function bindUnlink(root) {
+        root.querySelectorAll('[data-unlink]').forEach(function (btn) {
+          btn.onclick = function () {
+            Api.del('/api/users/' + parent.id + '/children/' + btn.dataset.unlink)
+              .then(function () {
+                UI.success('Rattachement retiré.');
+                UI.closeModal();
+                openChildren(parent);
+              }).catch(UI.showError);
+          };
+        });
+      }
+
+      UI.modal({
+        title: 'Enfants de ' + (parent.full_name || parent.username),
+        body: body,
+        onOpen: bindUnlink,
+        buttons: [
+          { label: 'Fermer' },
+          {
+            label: 'Rattacher', variant: 'primary',
+            onClick: function () {
+              var root = document.getElementById('modal-body');
+              var select = root.querySelector('#child-add');
+              if (!select.value) { UI.error('Choisissez un élève.'); return; }
+              Api.post('/api/users/' + parent.id + '/children', {
+                student_id: Number(select.value),
+                relation: root.querySelector('#child-relation').value.trim() || null
+              }).then(function () {
+                UI.success('Enfant rattaché.');
+                UI.closeModal();
+                openChildren(parent);
+              }).catch(UI.showError);
+            }
+          }
+        ]
+      });
+    }).catch(UI.showError);
   }
 
   function openReset(user) {

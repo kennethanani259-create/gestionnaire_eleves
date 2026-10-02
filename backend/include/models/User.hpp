@@ -10,6 +10,7 @@ namespace app {
 /// Compte utilisateur. passwordHash n'est JAMAIS serialise par toJson().
 struct User {
     long long id = 0;
+    std::optional<long long> schoolId;  ///< etablissement de rattachement
     std::string username;
     std::string email;
     std::string passwordHash;

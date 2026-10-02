@@ -1,5 +1,7 @@
 /// Tests de securite : primitives cryptographiques (vecteurs officiels),
 /// jetons JWT, authentification et autorisation.
+#include <cctype>
+
 #include <doctest/doctest.h>
 
 #include "core/Error.hpp"
@@ -221,7 +223,8 @@ namespace {
 struct AuthFixture {
     std::unique_ptr<Database> db = testing::makeTestDatabase();
     UserRepository users{*db};
-    AuthService auth{users, "secret-de-test-suffisamment-long", 60};
+    SchoolRepository schools{*db};
+    AuthService auth{users, schools, "secret-de-test-suffisamment-long", 60};
 
     AuthFixture() {
         auth.createUser("admin", "admin@ecole.local", "MotDePasse123", "Administrateur",
@@ -275,66 +278,169 @@ TEST_CASE("AuthService : echecs d'authentification") {
     }
 }
 
-TEST_CASE("AuthService : inscription autonome selon la politique configuree") {
+TEST_CASE("AuthService : creation d'un etablissement par son fondateur") {
     auto db = testing::makeTestDatabase();
     UserRepository users{*db};
+    SchoolRepository schools{*db};
+    AuthService auth{users, schools, "secret-de-test-suffisamment-long", 60};
 
-    SUBCASE("mode 'approval' : compte cree mais inactif, role Consultation impose") {
-        AuthService auth{users, "secret-de-test-suffisamment-long", 60,
-                         SelfRegistration::Approval};
-        const auto result =
-            auth.selfRegister("parent", "parent@ecole.local", "MotDePasse123", "Parent");
-        CHECK(result.pendingApproval);
-        CHECK_FALSE(result.user.isActive);
-        CHECK(toString(result.user.role) == "VIEWER");
-        // La connexion reste impossible tant qu'un administrateur n'a pas valide.
-        CHECK_THROWS_AS(auth.login("parent", "MotDePasse123"), ForbiddenError);
+    const auto result = auth.registerSchool("College Les Palmiers", std::string("Cotonou"),
+                                            "fondateur", "f@ecole.local", "MotDePasse123",
+                                            "Fondatrice");
+    REQUIRE(result.school.has_value());
+    CHECK(result.school->name == "College Les Palmiers");
+    // Matricule genere par le serveur, jamais choisi par le client.
+    CHECK(result.school->code.size() == 8);
+    CHECK_FALSE(result.pendingApproval);
+
+    // Le fondateur est administrateur, actif, et rattache a SON ecole.
+    CHECK(toString(result.user.role) == "ADMIN");
+    CHECK(result.user.isActive);
+    REQUIRE(result.user.schoolId.has_value());
+    CHECK(*result.user.schoolId == result.school->id);
+    CHECK_NOTHROW(auth.login("fondateur", "MotDePasse123"));
+
+    SUBCASE("deux etablissements recoivent des matricules differents") {
+        const auto other = auth.registerSchool("Lycee Victor Hugo", std::nullopt, "autre",
+                                               "a@ecole.local", "MotDePasse123", "Autre");
+        REQUIRE(other.school.has_value());
+        CHECK(other.school->code != result.school->code);
+        CHECK(other.school->id != result.school->id);
     }
 
-    SUBCASE("mode 'open' : le compte est utilisable immediatement") {
-        AuthService auth{users, "secret-de-test-suffisamment-long", 60, SelfRegistration::Open};
-        const auto result =
-            auth.selfRegister("libre", "libre@ecole.local", "MotDePasse123", "Libre");
-        CHECK_FALSE(result.pendingApproval);
-        CHECK(result.user.isActive);
-        CHECK(toString(result.user.role) == "VIEWER");
-        CHECK_NOTHROW(auth.login("libre", "MotDePasse123"));
-    }
-
-    SUBCASE("mode 'off' : toute demande est refusee") {
-        AuthService auth{users, "secret-de-test-suffisamment-long", 60, SelfRegistration::Off};
-        CHECK_THROWS_AS(
-            auth.selfRegister("refuse", "refuse@ecole.local", "MotDePasse123", "Refuse"),
-            ForbiddenError);
-    }
-
-    SUBCASE("exigences de robustesse du mot de passe") {
-        AuthService auth{users, "secret-de-test-suffisamment-long", 60, SelfRegistration::Open};
-        // Trop court.
-        CHECK_THROWS_AS(auth.selfRegister("court", "court@ecole.local", "Court12", "A"),
+    SUBCASE("le nom de l'etablissement est obligatoire") {
+        CHECK_THROWS_AS(auth.registerSchool("", std::nullopt, "x1", "x1@ecole.local",
+                                            "MotDePasse123", "X"),
                         ValidationError);
-        // Assez long mais sans chiffre.
-        CHECK_THROWS_AS(auth.selfRegister("sanschiffre", "sanschiffre@ecole.local", "motdepasselong", "B"),
-                        ValidationError);
-        // Assez long mais sans lettre.
-        CHECK_THROWS_AS(auth.selfRegister("sanslettre", "sanslettre@ecole.local", "1234567890", "C"),
-                        ValidationError);
-        // Mot de passe vide.
-        CHECK_THROWS_AS(auth.selfRegister("videmdp", "videmdp@ecole.local", "", "D"), ValidationError);
-        // Conforme.
-        CHECK_NOTHROW(auth.selfRegister("conforme", "conforme@ecole.local", "MotDePasse123", "E"));
     }
 }
 
-TEST_CASE("AuthService : l'inscription ne peut pas usurper un compte existant") {
+TEST_CASE("AuthService : rejoindre un etablissement avec son matricule") {
+    auto db = testing::makeTestDatabase();
+    UserRepository users{*db};
+    SchoolRepository schools{*db};
+    AuthService auth{users, schools, "secret-de-test-suffisamment-long", 60,
+                     SelfRegistration::Open};
+
+    const auto founded = auth.registerSchool("Ecole Alpha", std::nullopt, "chef",
+                                             "chef@alpha.local", "MotDePasse123", "Chef");
+    const std::string code = founded.school->code;
+
+    SUBCASE("un enseignant rejoint et est rattache a la bonne ecole") {
+        const auto joined = auth.joinSchool(code, UserRole::Teacher, "prof1", "p1@alpha.local",
+                                            "MotDePasse123", "Prof Un");
+        CHECK(toString(joined.user.role) == "TEACHER");
+        REQUIRE(joined.user.schoolId.has_value());
+        CHECK(*joined.user.schoolId == founded.school->id);
+        CHECK_NOTHROW(auth.login("prof1", "MotDePasse123"));
+    }
+
+    SUBCASE("un parent rejoint egalement") {
+        const auto joined = auth.joinSchool(code, UserRole::Parent, "maman", "m@alpha.local",
+                                            "MotDePasse123", "Maman");
+        CHECK(toString(joined.user.role) == "PARENT");
+    }
+
+    SUBCASE("le matricule est insensible a la casse") {
+        std::string lowered = code;
+        for (auto& c : lowered) c = static_cast<char>(std::tolower(c));
+        CHECK_NOTHROW(auth.joinSchool(lowered, UserRole::Viewer, "casse", "c@alpha.local",
+                                      "MotDePasse123", "Casse"));
+    }
+
+    SUBCASE("le role d'administrateur ne s'obtient jamais avec un matricule") {
+        CHECK_THROWS_AS(auth.joinSchool(code, UserRole::Admin, "pirate", "pi@alpha.local",
+                                        "MotDePasse123", "Pirate"),
+                        ForbiddenError);
+    }
+
+    SUBCASE("un matricule inconnu est refuse") {
+        CHECK_THROWS_AS(auth.joinSchool("ZZZZZZZZ", UserRole::Viewer, "inconnu",
+                                        "i@alpha.local", "MotDePasse123", "Inconnu"),
+                        ValidationError);
+    }
+
+    SUBCASE("exigences de robustesse du mot de passe") {
+        CHECK_THROWS_AS(auth.joinSchool(code, UserRole::Viewer, "court", "court@alpha.local",
+                                        "Court12", "A"),
+                        ValidationError);
+        CHECK_THROWS_AS(auth.joinSchool(code, UserRole::Viewer, "sanschiffre",
+                                        "sc@alpha.local", "motdepasselong", "B"),
+                        ValidationError);
+        CHECK_THROWS_AS(auth.joinSchool(code, UserRole::Viewer, "sanslettre", "sl@alpha.local",
+                                        "1234567890", "C"),
+                        ValidationError);
+        CHECK_THROWS_AS(auth.joinSchool(code, UserRole::Viewer, "videmdp", "v@alpha.local", "",
+                                        "D"),
+                        ValidationError);
+        CHECK_NOTHROW(auth.joinSchool(code, UserRole::Viewer, "conforme", "co@alpha.local",
+                                      "MotDePasse123", "E"));
+    }
+}
+
+TEST_CASE("AuthService : politique d'inscription et validation prealable") {
+    auto db = testing::makeTestDatabase();
+    UserRepository users{*db};
+    SchoolRepository schools{*db};
+
+    SUBCASE("mode 'approval' : le compte attend la validation de l'ecole") {
+        AuthService auth{users, schools, "secret-de-test-suffisamment-long", 60,
+                         SelfRegistration::Approval};
+        const auto founded = auth.registerSchool("Ecole Beta", std::nullopt, "chefb",
+                                                 "chefb@beta.local", "MotDePasse123", "Chef B");
+        const auto joined = auth.joinSchool(founded.school->code, UserRole::Teacher, "attente",
+                                            "at@beta.local", "MotDePasse123", "Attente");
+        CHECK(joined.pendingApproval);
+        CHECK_FALSE(joined.user.isActive);
+        CHECK_THROWS_AS(auth.login("attente", "MotDePasse123"), ForbiddenError);
+        // Le fondateur, lui, reste utilisable : sinon personne ne validerait.
+        CHECK_NOTHROW(auth.login("chefb", "MotDePasse123"));
+    }
+
+    SUBCASE("mode 'off' : ni creation d'ecole ni adhesion") {
+        AuthService auth{users, schools, "secret-de-test-suffisamment-long", 60,
+                         SelfRegistration::Off};
+        CHECK_THROWS_AS(auth.registerSchool("Ecole Gamma", std::nullopt, "g", "g@g.local",
+                                            "MotDePasse123", "G"),
+                        ForbiddenError);
+        CHECK_THROWS_AS(auth.joinSchool("TEST01", UserRole::Viewer, "g2", "g2@g.local",
+                                        "MotDePasse123", "G2"),
+                        ForbiddenError);
+    }
+}
+
+TEST_CASE("AuthService : le role choisi a la connexion doit correspondre au compte") {
     AuthFixture f;
-    // Un visiteur ne doit pas pouvoir reprendre l'identifiant de l'administrateur.
-    CHECK_THROWS_AS(f.auth.selfRegister("admin", "autre@ecole.local", "MotDePasse123", "Faux"),
+    // Le bon role passe.
+    CHECK_NOTHROW(f.auth.login("admin", "MotDePasse123", UserRole::Admin));
+    // Un role different est refuse, meme avec le bon mot de passe : le
+    // selecteur ne peut jamais accorder de droits, seulement en interdire.
+    CHECK_THROWS_AS(f.auth.login("admin", "MotDePasse123", UserRole::Teacher), ForbiddenError);
+    CHECK_THROWS_AS(f.auth.login("admin", "MotDePasse123", UserRole::Parent), ForbiddenError);
+    // Sans precision, la connexion reste possible.
+    const auto result = f.auth.login("admin", "MotDePasse123");
+    CHECK(toString(result.user.role) == "ADMIN");
+}
+
+TEST_CASE("AuthService : l'inscription ne peut pas usurper un compte existant") {
+    auto db = testing::makeTestDatabase();
+    UserRepository users{*db};
+    SchoolRepository schools{*db};
+    AuthService auth{users, schools, "secret-de-test-suffisamment-long", 60,
+                     SelfRegistration::Open};
+    const auto founded = auth.registerSchool("Ecole Delta", std::nullopt, "admin",
+                                             "admin@delta.local", "MotDePasse123", "Admin");
+    const std::string code = founded.school->code;
+
+    // L'identifiant et l'e-mail restent uniques au niveau global : la
+    // connexion se fait sans connaitre l'etablissement.
+    CHECK_THROWS_AS(auth.joinSchool(code, UserRole::Viewer, "admin", "autre@delta.local",
+                                    "MotDePasse123", "Faux"),
                     ValidationError);
-    CHECK_THROWS_AS(f.auth.selfRegister("autre", "admin@ecole.local", "MotDePasse123", "Faux"),
+    CHECK_THROWS_AS(auth.joinSchool(code, UserRole::Viewer, "autre", "admin@delta.local",
+                                    "MotDePasse123", "Faux"),
                     ValidationError);
-    // Le compte administrateur est intact.
-    const auto admin = f.auth.login("admin", "MotDePasse123");
+    const auto admin = auth.login("admin", "MotDePasse123");
     CHECK(toString(admin.user.role) == "ADMIN");
 }
 
@@ -417,7 +523,8 @@ TEST_CASE("AuthService : protections sur la suppression de comptes") {
 TEST_CASE("AuthService : le compte administrateur initial n'est cree qu'une fois") {
     auto db = testing::makeTestDatabase();
     UserRepository users(*db);
-    AuthService auth(users, "secret-de-test-suffisamment-long", 60);
+    SchoolRepository schools(*db);
+    AuthService auth(users, schools, "secret-de-test-suffisamment-long", 60);
 
     const auto password = auth.ensureInitialAdmin();
     REQUIRE(password.has_value());

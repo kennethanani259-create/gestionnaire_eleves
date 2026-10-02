@@ -21,6 +21,16 @@ public:
     virtual std::optional<User> findByEmail(const std::string& email) = 0;
     virtual std::vector<User> findAll() = 0;
     virtual long long count() = 0;
+
+    // --- Rattachement parent -> eleve -------------------------------------
+    /// Identifiants des eleves rattaches a un parent.
+    virtual std::vector<long long> childrenOf(long long parentUserId) = 0;
+    /// Rattache un eleve a un parent (sans effet si le lien existe deja).
+    virtual void linkChild(long long parentUserId, long long studentId,
+                           const std::optional<std::string>& relation) = 0;
+    virtual bool unlinkChild(long long parentUserId, long long studentId) = 0;
+    /// true si l'eleve est bien rattache a ce parent.
+    virtual bool hasChild(long long parentUserId, long long studentId) = 0;
 };
 
 class UserRepository : public IUserRepository {
@@ -36,6 +46,11 @@ public:
     std::optional<User> findByEmail(const std::string& email) override;
     std::vector<User> findAll() override;
     long long count() override;
+    std::vector<long long> childrenOf(long long parentUserId) override;
+    void linkChild(long long parentUserId, long long studentId,
+                   const std::optional<std::string>& relation) override;
+    bool unlinkChild(long long parentUserId, long long studentId) override;
+    bool hasChild(long long parentUserId, long long studentId) override;
 
 private:
     Database& db_;

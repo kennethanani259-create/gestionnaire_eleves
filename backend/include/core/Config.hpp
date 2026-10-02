@@ -32,8 +32,10 @@ struct Config {
     LogLevel logLevel = LogLevel::Info;
     std::string logFile;                ///< vide = console uniquement
     int threadPoolSize = 8;
-    /// Par defaut : inscription ouverte mais soumise a validation d'un administrateur.
-    SelfRegistration selfRegistration = SelfRegistration::Approval;
+    /// Par defaut : inscription ouverte, acces immediat (le matricule de
+    /// l'etablissement fait foi). Passer a 'approval' pour exiger la
+    /// validation d'un administrateur, ou 'off' pour fermer les inscriptions.
+    SelfRegistration selfRegistration = SelfRegistration::Open;
 
     /// Charge la configuration depuis les variables d'environnement.
     static Config fromEnvironment();

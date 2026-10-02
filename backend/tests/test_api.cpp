@@ -11,6 +11,7 @@
 #include <httplib/httplib.h>
 
 #include "api/HttpServer.hpp"
+#include "repositories/SchoolRepository.hpp"
 #include "services/AuthService.hpp"
 #include "utils/Jwt.hpp"
 #include "TestHelpers.hpp"
@@ -41,8 +42,12 @@ public:
 
         // Comptes de test (crees avant le serveur : ensureInitialAdmin ne
         // s'appliquera donc pas) couvrant les trois roles.
+        // Un etablissement, et la portee posee dessus : tous les comptes et
+        // toutes les donnees de test lui appartiennent.
+        schoolId_ = testing::seedSchool(*db_, "Ecole d'integration", "INTEG1");
         users_ = std::make_unique<UserRepository>(*db_);
-        AuthService auth(*users_, config.jwtSecret, config.jwtTtlMinutes);
+        schools_ = std::make_unique<SchoolRepository>(*db_);
+        AuthService auth(*users_, *schools_, config.jwtSecret, config.jwtTtlMinutes);
         auth.createUser("admin", "admin@test.local", "MotDePasse123", "Admin", UserRole::Admin);
         auth.createUser("prof", "prof@test.local", "MotDePasse123", "Prof", UserRole::Teacher);
         auth.createUser("lecteur", "lecteur@test.local", "MotDePasse123", "Lecteur",
@@ -126,6 +131,8 @@ private:
     std::string viewerToken_;
     std::unique_ptr<Database> db_;
     std::unique_ptr<UserRepository> users_;
+    std::unique_ptr<SchoolRepository> schools_;
+    long long schoolId_ = 0;
     std::unique_ptr<api::HttpServer> server_;
     std::thread thread_;
 };
@@ -497,7 +504,7 @@ TEST_CASE("API: connexion et profil utilisateur") {
     }
 }
 
-TEST_CASE("API: inscription autonome sur la page publique") {
+TEST_CASE("API: inscription publique (creer une ecole ou en rejoindre une)") {
     ApiFixture api;
     auto anonymous = api.anonymousClient();
 
@@ -505,84 +512,286 @@ TEST_CASE("API: inscription autonome sur la page publique") {
         auto res = anonymous.Get("/api/auth/registration");
         REQUIRE(res);
         CHECK(res->status == 200);
-        const auto body = ApiFixture::body(res);
-        CHECK(body["enabled"] == true);
-        CHECK(body["mode"] == "approval");
-        CHECK(body["requires_approval"] == true);
+        CHECK(ApiFixture::body(res)["enabled"] == true);
     }
 
-    SUBCASE("demande valide -> 201, compte en attente de validation") {
+    SUBCASE("creer son etablissement -> 201, fondateur administrateur") {
         auto res = anonymous.Post("/api/auth/register",
-                                  R"({"username":"parent","email":"parent@test.local",
-                                      "password":"MotDePasse123","full_name":"Parent Test"})",
+                                  R"({"school_name":"Ecole Nouvelle","school_city":"Porto-Novo",
+                                      "username":"fondateur","email":"f@nouvelle.local",
+                                      "password":"MotDePasse123","full_name":"Fondateur"})",
                                   kJson);
         REQUIRE(res);
         CHECK(res->status == 201);
         const auto body = ApiFixture::body(res);
-        CHECK(body["pending_approval"] == true);
-        CHECK(body["user"]["username"] == "parent");
-        // Role impose, jamais negocie depuis le navigateur.
-        CHECK(body["user"]["role"] == "VIEWER");
-        CHECK(body["user"]["is_active"] == false);
-        // Aucune empreinte de mot de passe ne doit transiter.
+        CHECK(body["user"]["role"] == "ADMIN");
+        CHECK(body["user"]["is_active"] == true);
+        CHECK(body["school"]["name"] == "Ecole Nouvelle");
+        // La reponse publique ne divulgue pas le matricule.
+        CHECK_FALSE(body["school"].contains("code"));
         CHECK(res->body.find("pbkdf2") == std::string::npos);
 
-        // Tant que l'administrateur n'a pas valide, la connexion est refusee.
+        // Le fondateur se connecte et voit le matricule de SON ecole.
         auto login = anonymous.Post("/api/auth/login",
-                                    R"({"username":"parent","password":"MotDePasse123"})", kJson);
-        REQUIRE(login);
-        CHECK(login->status == 403);
-
-        // Apres activation par un administrateur, la connexion fonctionne.
-        auto admin = api.client();
-        const auto id = body["user"]["id"].get<long long>();
-        auto activation = admin.Put("/api/users/" + std::to_string(id),
-                                    R"({"username":"parent","email":"parent@test.local",
-                                        "full_name":"Parent Test","role":"VIEWER",
-                                        "is_active":true})",
+                                    R"({"username":"fondateur","password":"MotDePasse123"})",
                                     kJson);
-        REQUIRE(activation);
-        CHECK(activation->status == 200);
-
-        auto login2 = anonymous.Post("/api/auth/login",
-                                     R"({"username":"parent","password":"MotDePasse123"})", kJson);
-        REQUIRE(login2);
-        CHECK(login2->status == 200);
-        CHECK(ApiFixture::body(login2)["user"]["role"] == "VIEWER");
+        REQUIRE(login);
+        REQUIRE(login->status == 200);
+        const auto token = ApiFixture::body(login)["token"].get<std::string>();
+        auto client = api.clientWithToken(token);
+        auto school = client.Get("/api/school");
+        REQUIRE(school);
+        CHECK(school->status == 200);
+        CHECK(ApiFixture::body(school)["code"].get<std::string>().size() == 8);
     }
 
-    SUBCASE("un role privilegie demande par le client est ignore") {
+    SUBCASE("rejoindre un etablissement avec son matricule") {
+        // Matricule de l'ecole creee par la fixture, lu par l'administrateur.
+        auto admin = api.client();
+        auto schoolRes = admin.Get("/api/school");
+        REQUIRE(schoolRes);
+        REQUIRE(schoolRes->status == 200);
+        const auto code = ApiFixture::body(schoolRes)["code"].get<std::string>();
+
         auto res = anonymous.Post("/api/auth/register",
-                                  R"({"username":"pirate","email":"pirate@test.local",
-                                      "password":"MotDePasse123","full_name":"Pirate",
-                                      "role":"ADMIN","is_active":true})",
+                                  R"({"school_code":")" + code + R"(","role":"PARENT",
+                                      "username":"maman","email":"maman@test.local",
+                                      "password":"MotDePasse123","full_name":"Maman"})",
                                   kJson);
         REQUIRE(res);
         CHECK(res->status == 201);
-        CHECK(ApiFixture::body(res)["user"]["role"] == "VIEWER");
-        CHECK(ApiFixture::body(res)["user"]["is_active"] == false);
+        CHECK(ApiFixture::body(res)["user"]["role"] == "PARENT");
+
+        auto login = anonymous.Post("/api/auth/login",
+                                    R"({"username":"maman","password":"MotDePasse123"})", kJson);
+        REQUIRE(login);
+        CHECK(login->status == 200);
     }
 
-    SUBCASE("identifiant deja pris -> 400 avec le champ en faute") {
+    SUBCASE("un role ADMIN demande avec un matricule est refuse") {
+        auto admin = api.client();
+        const auto code = ApiFixture::body(admin.Get("/api/school"))["code"].get<std::string>();
         auto res = anonymous.Post("/api/auth/register",
-                                  R"({"username":"admin","email":"autre@test.local",
-                                      "password":"MotDePasse123","full_name":"Doublon"})",
+                                  R"({"school_code":")" + code + R"(","role":"ADMIN",
+                                      "username":"pirate","email":"pirate@test.local",
+                                      "password":"MotDePasse123","full_name":"Pirate"})",
+                                  kJson);
+        REQUIRE(res);
+        CHECK(res->status == 403);
+    }
+
+    SUBCASE("sans matricule ni nom d'ecole -> 400") {
+        auto res = anonymous.Post("/api/auth/register",
+                                  R"({"username":"orphelin","email":"o@test.local",
+                                      "password":"MotDePasse123","full_name":"Orphelin"})",
                                   kJson);
         REQUIRE(res);
         CHECK(res->status == 400);
-        const auto body = ApiFixture::body(res);
-        CHECK(body["error"]["code"] == "VALIDATION_ERROR");
-        CHECK(body["error"]["details"]["fields"].contains("username"));
+        CHECK(ApiFixture::body(res)["error"]["details"]["fields"].contains("school_code"));
+    }
+
+    SUBCASE("matricule inconnu -> 400") {
+        auto res = anonymous.Post("/api/auth/register",
+                                  R"({"school_code":"ZZZZZZZZ","username":"x","email":"x@t.local",
+                                      "password":"MotDePasse123","full_name":"X"})",
+                                  kJson);
+        REQUIRE(res);
+        CHECK(res->status == 400);
     }
 
     SUBCASE("mot de passe trop faible -> 400") {
+        auto admin = api.client();
+        const auto code = ApiFixture::body(admin.Get("/api/school"))["code"].get<std::string>();
         auto res = anonymous.Post("/api/auth/register",
-                                  R"({"username":"faible","email":"faible@test.local",
-                                      "password":"motdepasse","full_name":"Faible"})",
+                                  R"({"school_code":")" + code + R"(","username":"faible",
+                                      "email":"faible@test.local","password":"motdepasse",
+                                      "full_name":"Faible"})",
                                   kJson);
         REQUIRE(res);
         CHECK(res->status == 400);
         CHECK(ApiFixture::body(res)["error"]["details"]["fields"].contains("password"));
+    }
+}
+
+TEST_CASE("API: le role choisi a la connexion est verifie") {
+    ApiFixture api;
+    auto anonymous = api.anonymousClient();
+
+    SUBCASE("role correct -> 200") {
+        auto res = anonymous.Post("/api/auth/login",
+                                  R"({"username":"prof","password":"MotDePasse123",
+                                      "role":"TEACHER"})",
+                                  kJson);
+        REQUIRE(res);
+        CHECK(res->status == 200);
+    }
+
+    SUBCASE("role incorrect -> 403, aucun jeton delivre") {
+        auto res = anonymous.Post("/api/auth/login",
+                                  R"({"username":"prof","password":"MotDePasse123",
+                                      "role":"ADMIN"})",
+                                  kJson);
+        REQUIRE(res);
+        CHECK(res->status == 403);
+        CHECK(res->body.find("token") == std::string::npos);
+    }
+}
+
+TEST_CASE("API: espace parent limite aux enfants rattaches") {
+    ApiFixture api;
+    auto anonymous = api.anonymousClient();
+    auto admin = api.client();
+
+    // Deux eleves dans l'etablissement de la fixture.
+    auto created = admin.Post("/api/students",
+                              R"({"first_name":"Awa","last_name":"Dossou",
+                                  "birth_date":"2012-04-18","gender":"F",
+                                  "enrollment_date":"2025-09-05"})",
+                              kJson);
+    REQUIRE(created);
+    REQUIRE(created->status == 201);
+    const auto mineId = ApiFixture::body(created)["id"].get<long long>();
+
+    auto other = admin.Post("/api/students",
+                            R"({"first_name":"Kofi","last_name":"Mensah",
+                                "birth_date":"2011-02-10","gender":"M",
+                                "enrollment_date":"2025-09-05"})",
+                            kJson);
+    REQUIRE(other);
+    REQUIRE(other->status == 201);
+    const auto otherId = ApiFixture::body(other)["id"].get<long long>();
+
+    // Un parent rejoint l'ecole avec le matricule.
+    const auto code = ApiFixture::body(admin.Get("/api/school"))["code"].get<std::string>();
+    auto reg = anonymous.Post("/api/auth/register",
+                              R"({"school_code":")" + code + R"(","role":"PARENT",
+                                  "username":"papa","email":"papa@test.local",
+                                  "password":"MotDePasse123","full_name":"Papa"})",
+                              kJson);
+    REQUIRE(reg);
+    REQUIRE(reg->status == 201);
+    const auto parentId = ApiFixture::body(reg)["user"]["id"].get<long long>();
+
+    auto login = anonymous.Post("/api/auth/login",
+                                R"({"username":"papa","password":"MotDePasse123"})", kJson);
+    REQUIRE(login);
+    REQUIRE(login->status == 200);
+    auto parent = api.clientWithToken(ApiFixture::body(login)["token"].get<std::string>());
+
+    SUBCASE("sans rattachement, un parent ne voit aucun enfant") {
+        auto res = parent.Get("/api/parent/children");
+        REQUIRE(res);
+        CHECK(res->status == 200);
+        CHECK(ApiFixture::body(res)["items"].empty());
+    }
+
+    SUBCASE("un parent ne peut pas lister les eleves de l'etablissement") {
+        auto res = parent.Get("/api/students");
+        REQUIRE(res);
+        CHECK(res->status == 403);
+    }
+
+    SUBCASE("ni consulter le tableau de bord ou les comptes") {
+        CHECK(parent.Get("/api/dashboard")->status == 403);
+        CHECK(parent.Get("/api/users")->status == 403);
+    }
+
+    SUBCASE("apres rattachement, il voit son enfant et lui seul") {
+        auto link = admin.Post("/api/users/" + std::to_string(parentId) + "/children",
+                               R"({"student_id":)" + std::to_string(mineId) +
+                                   R"(,"relation":"Pere"})",
+                               kJson);
+        REQUIRE(link);
+        CHECK(link->status == 201);
+
+        auto res = parent.Get("/api/parent/children");
+        REQUIRE(res);
+        REQUIRE(res->status == 200);
+        const auto items = ApiFixture::body(res)["items"];
+        REQUIRE(items.size() == 1);
+        CHECK(items[0]["id"] == mineId);
+
+        // Bulletin et presences de son enfant : autorises.
+        CHECK(parent.Get("/api/parent/children/" + std::to_string(mineId) + "/results")
+                  ->status == 200);
+        CHECK(parent.Get("/api/parent/children/" + std::to_string(mineId) + "/attendance")
+                  ->status == 200);
+
+        // L'autre eleve reste inaccessible, meme en forgeant l'identifiant.
+        CHECK(parent.Get("/api/parent/children/" + std::to_string(otherId) + "/results")
+                  ->status == 404);
+        CHECK(parent.Get("/api/parent/children/" + std::to_string(otherId) + "/grades")
+                  ->status == 404);
+        CHECK(parent.Get("/api/students/" + std::to_string(otherId))->status == 403);
+    }
+
+    SUBCASE("un parent ne peut pas se rattacher un enfant lui-meme") {
+        auto res = parent.Post("/api/users/" + std::to_string(parentId) + "/children",
+                               R"({"student_id":)" + std::to_string(otherId) + R"(})", kJson);
+        REQUIRE(res);
+        CHECK(res->status == 403);
+    }
+
+    SUBCASE("le rattachement peut etre retire") {
+        admin.Post("/api/users/" + std::to_string(parentId) + "/children",
+                   R"({"student_id":)" + std::to_string(mineId) + R"(})", kJson);
+        auto del = admin.Delete("/api/users/" + std::to_string(parentId) + "/children/" +
+                                std::to_string(mineId));
+        REQUIRE(del);
+        CHECK(del->status == 204);
+        CHECK(ApiFixture::body(parent.Get("/api/parent/children"))["items"].empty());
+    }
+}
+
+TEST_CASE("API: cloisonnement entre etablissements") {
+    ApiFixture api;
+    auto anonymous = api.anonymousClient();
+
+    // Une seconde ecole, creee depuis la page publique.
+    auto created = anonymous.Post("/api/auth/register",
+                                  R"({"school_name":"Ecole Voisine","username":"voisin",
+                                      "email":"v@voisine.local","password":"MotDePasse123",
+                                      "full_name":"Voisin"})",
+                                  kJson);
+    REQUIRE(created);
+    REQUIRE(created->status == 201);
+
+    auto login = anonymous.Post("/api/auth/login",
+                                R"({"username":"voisin","password":"MotDePasse123"})", kJson);
+    REQUIRE(login);
+    REQUIRE(login->status == 200);
+    auto neighbour = api.clientWithToken(ApiFixture::body(login)["token"].get<std::string>());
+
+    SUBCASE("l'ecole voisine ne voit aucun eleve de la premiere") {
+        auto res = neighbour.Get("/api/students");
+        REQUIRE(res);
+        CHECK(res->status == 200);
+        CHECK(ApiFixture::body(res)["total"] == 0);
+    }
+
+    SUBCASE("ni ses classes, ni ses comptes") {
+        auto classes = neighbour.Get("/api/classes");
+        REQUIRE(classes);
+        CHECK(ApiFixture::body(classes)["items"].empty());
+
+        auto users = neighbour.Get("/api/users");
+        REQUIRE(users);
+        // Seul son propre compte.
+        CHECK(ApiFixture::body(users)["items"].size() == 1);
+        CHECK(ApiFixture::body(users)["items"][0]["username"] == "voisin");
+    }
+
+    SUBCASE("un eleve de l'autre ecole est introuvable, meme par identifiant") {
+        auto admin = api.client();
+        auto mine = admin.Get("/api/students");
+        REQUIRE(mine);
+        const auto items = ApiFixture::body(mine)["items"];
+        if (!items.empty()) {
+            const auto id = items[0]["id"].get<long long>();
+            auto res = neighbour.Get("/api/students/" + std::to_string(id));
+            REQUIRE(res);
+            CHECK(res->status == 404);
+        }
     }
 }
 

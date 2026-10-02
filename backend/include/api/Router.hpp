@@ -18,8 +18,9 @@ namespace app::api {
 
 /// Niveau d'acces exige par une route.
 enum class Access {
-    Public,   ///< aucune authentification (login, sante du service)
-    Viewer,   ///< tout utilisateur authentifie (lecture)
+    Public,        ///< aucune authentification (login, sante du service)
+    Authenticated, ///< tout compte connecte, y compris un parent (profil, son ecole)
+    Viewer,   ///< lecture de l'etablissement entier (exclut donc les parents)
     Teacher,  ///< enseignant ou administrateur (ecriture pedagogique)
     Admin     ///< administrateur uniquement
 };

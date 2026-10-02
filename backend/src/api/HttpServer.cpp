@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include "controllers/AuthController.hpp"
+#include "controllers/ParentController.hpp"
 #include "controllers/ClassController.hpp"
 #include "controllers/GradeController.hpp"
 #include "controllers/ReportController.hpp"
@@ -23,6 +24,7 @@
 #include "repositories/TeacherRepository.hpp"
 #include "repositories/UserRepository.hpp"
 #include "services/AttendanceService.hpp"
+#include "repositories/SchoolRepository.hpp"
 #include "services/AuthService.hpp"
 #include "services/ClassService.hpp"
 #include "services/GradeService.hpp"
@@ -46,6 +48,7 @@ struct HttpServer::Impl {
     GradeRepository gradeRepo;
     AttendanceRepository attendanceRepo;
     UserRepository userRepo;
+    SchoolRepository schoolRepo;
     SchoolYearRepository yearRepo;
 
     // Services
@@ -64,6 +67,7 @@ struct HttpServer::Impl {
     ClassController classController;
     GradeController gradeController;
     AuthController authController;
+    ParentController parentController;
     ReportController reportController;
 
     Router router;
@@ -78,12 +82,13 @@ struct HttpServer::Impl {
           gradeRepo(db),
           attendanceRepo(db),
           userRepo(db),
+          schoolRepo(db),
           yearRepo(db),
           studentService(studentRepo, classRepo),
           classService(classRepo, subjectRepo, studentRepo, teacherRepo, yearRepo),
           gradeService(gradeRepo, studentRepo, subjectRepo, classRepo, attendanceRepo),
           attendanceService(attendanceRepo, studentRepo, subjectRepo, classRepo),
-          authService(userRepo, config.jwtSecret, config.jwtTtlMinutes,
+          authService(userRepo, schoolRepo, config.jwtSecret, config.jwtTtlMinutes,
                       config.selfRegistration),
           reportService(studentService, classService, gradeService, attendanceService,
                         studentRepo, gradeRepo),
@@ -92,6 +97,7 @@ struct HttpServer::Impl {
           classController(classService, studentService, gradeService),
           gradeController(gradeService, attendanceService),
           authController(authService),
+          parentController(studentService, gradeService, attendanceService, userRepo),
           reportController(reportService),
           // Le garde du routeur delegue au middleware d'authentification :
           // toute route non publique exige un jeton valide et le role requis.
@@ -202,6 +208,7 @@ void HttpServer::registerRoutes() {
                });
 
     impl_->authController.registerRoutes(router);
+    impl_->parentController.registerRoutes(router);
     impl_->studentController.registerRoutes(router);
     impl_->classController.registerRoutes(router);
     impl_->gradeController.registerRoutes(router);

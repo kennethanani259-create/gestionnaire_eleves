@@ -147,27 +147,74 @@ Le code compile sans aucun avertissement avec `-Wall -Wextra -Wpedantic`.
 | `APP_THREAD_POOL_SIZE` | `8`                   | Threads HTTP                              |
 | `APP_LOG_LEVEL`        | `INFO`                | `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`|
 | `APP_LOG_FILE`         | *(vide)*              | Fichier de log en plus de la console      |
-| `APP_SELF_REGISTRATION`| `approval`            | Inscription publique : `off`, `approval`, `open` |
+| `APP_SELF_REGISTRATION`| `open`                | Inscription publique : `off`, `approval`, `open` |
+
+### Multi-établissements : chaque école son registre
+
+L'application héberge **plusieurs établissements** sur une même installation.
+Chaque école possède un **matricule** de 8 caractères (alphabet sans caractères
+ambigus : ni `I`, ni `O`, ni `0`, ni `1`) qui sert de clé d'entrée.
+
+Le cloisonnement n'est pas une simple affaire d'affichage : **toutes** les
+requêtes SQL de lecture et d'écriture sont filtrées par l'établissement de
+l'utilisateur connecté, y compris les agrégats du tableau de bord et les accès
+par identifiant. Un élève d'une autre école répond `404`, jamais ses données.
+La portée est posée par le middleware d'authentification à chaque requête :
+aucune route ne peut l'oublier.
 
 ### Inscription depuis la page d'accueil
 
-La page d'entrée propose deux volets : **Se connecter** et **Demander un compte**.
-`APP_SELF_REGISTRATION` décide du sort des demandes :
+La page d'entrée propose deux volets : **Se connecter** et **S'inscrire**.
+L'inscription offre elle-même deux parcours :
+
+| Parcours | Ce qui se passe |
+| --- | --- |
+| **Créer mon école** (champ `school_name`) | Un établissement est créé et le signataire en devient l'**administrateur**, actif immédiatement. Il reçoit un matricule à diffuser. |
+| **Rejoindre une école** (champ `school_code`) | Le compte est rattaché à l'établissement du matricule, avec le rôle demandé : `TEACHER`, `PARENT` ou `VIEWER`. |
+
+Le rôle `ADMIN` est **refusé** sur le parcours « rejoindre » (`403`) : seul un
+administrateur en place peut promouvoir un compte. Le matricule saisi est
+vérifié en direct, qui affiche le nom de l'école avant l'envoi.
+
+`APP_SELF_REGISTRATION` décide du sort des adhésions :
 
 | Valeur     | Effet                                                                     |
 | ---------- | ------------------------------------------------------------------------- |
 | `off`      | Aucune inscription publique ; l'onglet n'est pas affiché. Seul un administrateur crée les comptes. |
-| `approval` | *(défaut)* Le compte est créé **inactif**. Il apparaît dans « Comptes » où un administrateur le valide ou le refuse. La connexion est refusée (403) avant validation. |
-| `open`     | Le compte est immédiatement utilisable.                                    |
+| `approval` | Le compte est créé **inactif** et apparaît dans « Comptes », où un administrateur le valide ou le refuse. La connexion est refusée (403) avant validation. |
+| `open`     | *(défaut)* Le compte est immédiatement utilisable.                         |
 
-Dans tous les cas, un compte issu de cette page reçoit **obligatoirement** le rôle
-`VIEWER` : le rôle et l'état d'activation envoyés par le navigateur sont ignorés.
-Le mot de passe doit faire au moins 10 caractères et mêler lettres et chiffres, et
-les demandes sont limitées à 5 par quart d'heure et par adresse source.
+> Le défaut `open` fait du **matricule** le élément de contrôle : seules les
+> personnes à qui l'école l'a communiqué peuvent entrer. Si votre établissement
+> préfère une décision humaine sur chaque adhésion, passez à `approval`. La
+> création d'une *nouvelle* école reste toujours immédiate : son fondateur
+> n'accède qu'à un registre vide, le sien.
 
-> `approval` est le défaut volontairement : un registre scolaire contient des
-> données personnelles d'élèves mineurs, une inscription en libre-service ne doit
-> pas y donner accès sans décision humaine.
+Le mot de passe doit faire au moins 10 caractères et mêler lettres et chiffres ;
+les inscriptions sont limitées à 5 par quart d'heure et par adresse source.
+
+Un administrateur retrouve le matricule de son école dans **Réglages →
+Mon établissement**, et peut le **renouveler** s'il a trop circulé (les comptes
+déjà inscrits ne sont pas affectés).
+
+### Rôle Parent
+
+Un parent n'est **pas** un lecteur restreint : il ne voit aucune liste d'élèves,
+aucun tableau de bord, aucun compte. Il n'accède qu'aux élèves que
+l'administration lui a **explicitement rattachés** (Comptes → icône « élèves »
+sur une ligne de parent). Pour chacun, il consulte le bulletin, les moyennes par
+matière, le rang et les présences — en lecture seule. Un identifiant d'élève
+forgé à la main renvoie `404`.
+
+Hiérarchie des privilèges : `ADMIN` (2) > `TEACHER` (1) > `VIEWER` (0) >
+`PARENT` (-1). Les routes du parent sont marquées `Authenticated` : elles
+n'exigent qu'une session valide, le filtrage se faisant sur le lien de filiation.
+
+### Choisir son rôle à la connexion
+
+Le formulaire de connexion propose un rôle. Le serveur **vérifie** que le compte
+le porte et refuse sinon (`403`, aucun jeton délivré) : ce choix ne permet jamais
+d'obtenir un privilège, il évite seulement de se tromper d'espace de travail.
 
 Les migrations SQL sont appliquées automatiquement au démarrage.
 

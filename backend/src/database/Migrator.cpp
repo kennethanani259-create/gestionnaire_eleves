@@ -51,6 +51,18 @@ int Migrator::migrate() {
     const auto applied = appliedMigrations();
     int count = 0;
 
+    // Les migrations qui reconstruisent une table (SQLite ne sait pas modifier
+    // une contrainte en place) doivent s'executer sans integrite referentielle :
+    // un DROP TABLE parent declencherait sinon les ON DELETE des tables filles.
+    // Le PRAGMA est sans effet a l'interieur d'une transaction : on le pose
+    // donc ici, avant toute transaction, et on verifie l'integrite a la fin.
+    const bool hasPending = std::any_of(
+        files.begin(), files.end(), [&applied](const fs::path& file) {
+            const std::string name = file.filename().string();
+            return std::find(applied.begin(), applied.end(), name) == applied.end();
+        });
+    if (hasPending) db_.executeScript("PRAGMA foreign_keys = OFF;");
+
     for (const auto& file : files) {
         const std::string name = file.filename().string();
         if (std::find(applied.begin(), applied.end(), name) != applied.end()) continue;
@@ -68,6 +80,15 @@ int Migrator::migrate() {
         stmt.execute();
         tx.commit();
         ++count;
+    }
+
+    if (hasPending) {
+        db_.executeScript("PRAGMA foreign_keys = ON;");
+        auto check = db_.prepare("PRAGMA foreign_key_check;");
+        if (check.step()) {
+            throw DatabaseError("Integrite referentielle rompue apres migration (table " +
+                                check.getText(0) + ")");
+        }
     }
 
     if (count == 0) {

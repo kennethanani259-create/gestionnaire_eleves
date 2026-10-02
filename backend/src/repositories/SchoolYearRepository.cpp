@@ -1,6 +1,7 @@
 #include "repositories/SchoolYearRepository.hpp"
 
 #include "core/Error.hpp"
+#include "core/Tenant.hpp"
 
 namespace app {
 namespace {
@@ -24,8 +25,10 @@ SchoolYear mapRow(const Statement& stmt) {
 long long SchoolYearRepository::create(const SchoolYear& value) {
     auto lock = db_.lockGuard();
     auto stmt = db_.prepare(
-        "INSERT INTO school_years (label, start_date, end_date, is_current) VALUES (?,?,?,?);");
-    stmt.bindAll(value.label, value.startDate, value.endDate, value.isCurrent);
+        "INSERT INTO school_years (label, start_date, end_date, is_current, school_id) "
+        "VALUES (?,?,?,?,?);");
+    stmt.bindAll(value.label, value.startDate, value.endDate, value.isCurrent,
+                 tenant::requireCurrentSchool());
     stmt.execute();
     const long long id = db_.lastInsertId();
     if (value.isCurrent) setCurrent(id);
@@ -35,7 +38,8 @@ long long SchoolYearRepository::create(const SchoolYear& value) {
 void SchoolYearRepository::update(const SchoolYear& value) {
     auto lock = db_.lockGuard();
     auto stmt = db_.prepare(
-        "UPDATE school_years SET label=?, start_date=?, end_date=? WHERE id=?;");
+        std::string("UPDATE school_years SET label=?, start_date=?, end_date=? WHERE id=? ") +
+        tenant::filter("") + ";");
     stmt.bindAll(value.label, value.startDate, value.endDate, value.id);
     stmt.execute();
     if (db_.changes() == 0) throw NotFoundError("Annee scolaire", value.id);
@@ -44,14 +48,14 @@ void SchoolYearRepository::update(const SchoolYear& value) {
 
 bool SchoolYearRepository::remove(long long id) {
     auto lock = db_.lockGuard();
-    auto stmt = db_.prepare("DELETE FROM school_years WHERE id=?;");
+    auto stmt = db_.prepare(std::string("DELETE FROM school_years WHERE id=? ") + tenant::filter("") + ";");
     stmt.bindAll(id);
     stmt.execute();
     return db_.changes() > 0;
 }
 
 std::optional<SchoolYear> SchoolYearRepository::findById(long long id) {
-    auto stmt = db_.prepare(std::string(kSelect) + "WHERE id=?;");
+    auto stmt = db_.prepare(std::string(kSelect) + "WHERE id=? " + tenant::filter("") + ";");
     stmt.bindAll(id);
     if (!stmt.step()) return std::nullopt;
     return mapRow(stmt);
@@ -59,13 +63,14 @@ std::optional<SchoolYear> SchoolYearRepository::findById(long long id) {
 
 std::optional<SchoolYear> SchoolYearRepository::findCurrent() {
     auto stmt = db_.prepare(std::string(kSelect) +
-                            "WHERE is_current = 1 ORDER BY start_date DESC LIMIT 1;");
+                            "WHERE is_current = 1 " + tenant::filter("") +
+                            "ORDER BY start_date DESC LIMIT 1;");
     if (!stmt.step()) return std::nullopt;
     return mapRow(stmt);
 }
 
 std::vector<SchoolYear> SchoolYearRepository::findAll() {
-    auto stmt = db_.prepare(std::string(kSelect) + "ORDER BY start_date DESC;");
+    auto stmt = db_.prepare(std::string(kSelect) + "WHERE 1=1 " + tenant::filter("") + "ORDER BY start_date DESC;");
     std::vector<SchoolYear> results;
     while (stmt.step()) results.push_back(mapRow(stmt));
     return results;
@@ -75,7 +80,8 @@ void SchoolYearRepository::setCurrent(long long id) {
     auto lock = db_.lockGuard();
     Transaction tx(db_);
     db_.executeScript("UPDATE school_years SET is_current = 0;");
-    auto stmt = db_.prepare("UPDATE school_years SET is_current = 1 WHERE id=?;");
+    auto stmt = db_.prepare(std::string("UPDATE school_years SET is_current = 1 WHERE id=? ") +
+                            tenant::filter("") + ";");
     stmt.bindAll(id);
     stmt.execute();
     if (db_.changes() == 0) throw NotFoundError("Annee scolaire", id);

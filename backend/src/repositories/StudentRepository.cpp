@@ -5,6 +5,7 @@
 #include <sstream>
 
 #include "core/Error.hpp"
+#include "core/Tenant.hpp"
 
 namespace app {
 namespace {
@@ -62,12 +63,13 @@ long long StudentRepository::create(const Student& student) {
     auto stmt = db_.prepare(
         "INSERT INTO students (matricule, first_name, last_name, birth_date, gender, "
         " address, phone, email, guardian_name, guardian_phone, enrollment_date, "
-        " status, photo_path, class_id) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
+        " status, photo_path, class_id, school_id) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
     stmt.bindAll(student.matricule, student.firstName, student.lastName, student.birthDate,
                  toString(student.gender), student.address, student.phone, student.email,
                  student.guardianName, student.guardianPhone, student.enrollmentDate,
-                 toString(student.status), student.photoPath, student.classId);
+                 toString(student.status), student.photoPath, student.classId,
+                 tenant::requireCurrentSchool());
     stmt.execute();
     return db_.lastInsertId();
 }
@@ -77,7 +79,7 @@ void StudentRepository::update(const Student& student) {
     auto stmt = db_.prepare(
         "UPDATE students SET matricule=?, first_name=?, last_name=?, birth_date=?, gender=?, "
         " address=?, phone=?, email=?, guardian_name=?, guardian_phone=?, enrollment_date=?, "
-        " status=?, photo_path=?, class_id=? WHERE id=?;");
+        " status=?, photo_path=?, class_id=? WHERE id=? " + tenant::filter("") + ";");
     stmt.bindAll(student.matricule, student.firstName, student.lastName, student.birthDate,
                  toString(student.gender), student.address, student.phone, student.email,
                  student.guardianName, student.guardianPhone, student.enrollmentDate,
@@ -88,21 +90,21 @@ void StudentRepository::update(const Student& student) {
 
 bool StudentRepository::remove(long long id) {
     auto lock = db_.lockGuard();
-    auto stmt = db_.prepare("DELETE FROM students WHERE id=?;");
+    auto stmt = db_.prepare(std::string("DELETE FROM students WHERE id=? ") + tenant::filter("") + ";");
     stmt.bindAll(id);
     stmt.execute();
     return db_.changes() > 0;
 }
 
 std::optional<Student> StudentRepository::findById(long long id) {
-    auto stmt = db_.prepare(std::string(kSelect) + "WHERE s.id = ?;");
+    auto stmt = db_.prepare(std::string(kSelect) + "WHERE s.id = ? " + tenant::filter("s") + ";");
     stmt.bindAll(id);
     if (!stmt.step()) return std::nullopt;
     return mapRow(stmt);
 }
 
 std::optional<Student> StudentRepository::findByMatricule(const std::string& matricule) {
-    auto stmt = db_.prepare(std::string(kSelect) + "WHERE s.matricule = ?;");
+    auto stmt = db_.prepare(std::string(kSelect) + "WHERE s.matricule = ? " + tenant::filter("s") + ";");
     stmt.bindAll(matricule);
     if (!stmt.step()) return std::nullopt;
     return mapRow(stmt);
@@ -114,7 +116,7 @@ namespace {
 /// Retourne le SQL et lie les parametres dans l'ordre d'apparition.
 std::string filterSql(const StudentFilter& filter) {
     std::ostringstream sql;
-    sql << "WHERE 1=1 ";
+    sql << "WHERE 1=1 " << tenant::filter("s");
     if (filter.query.has_value() && !filter.query->empty()) {
         sql << "AND (s.last_name LIKE ? OR s.first_name LIKE ? OR s.matricule LIKE ? "
                "OR (s.first_name || ' ' || s.last_name) LIKE ?) ";
@@ -165,6 +167,7 @@ std::vector<Student> StudentRepository::search(const StudentFilter& filter) {
 long long StudentRepository::count(const StudentFilter& filter) {
     const std::string sql =
         "SELECT COUNT(*) FROM students s LEFT JOIN classes c ON c.id = s.class_id " +
+        tenant::filter("s") +
         filterSql(filter);
     auto stmt = db_.prepare(sql);
     bindFilter(stmt, filter);
@@ -173,7 +176,7 @@ long long StudentRepository::count(const StudentFilter& filter) {
 }
 
 std::vector<Student> StudentRepository::findByClass(long long classId, bool activeOnly) {
-    std::string sql = std::string(kSelect) + "WHERE s.class_id = ? ";
+    std::string sql = std::string(kSelect) + "WHERE s.class_id = ? " + tenant::filter("s");
     if (activeOnly) sql += "AND s.status = 'ACTIVE' ";
     sql += "ORDER BY s.last_name, s.first_name;";
 
@@ -187,7 +190,8 @@ std::vector<Student> StudentRepository::findByClass(long long classId, bool acti
 bool StudentRepository::matriculeExists(const std::string& matricule,
                                         std::optional<long long> excludeId) {
     auto stmt = db_.prepare(
-        "SELECT 1 FROM students WHERE matricule = ? AND (? IS NULL OR id <> ?) LIMIT 1;");
+        std::string("SELECT 1 FROM students WHERE matricule = ? AND (? IS NULL OR id <> ?) ") +
+        tenant::filter("") + "LIMIT 1;");
     stmt.bindAll(matricule, excludeId, excludeId);
     return stmt.step();
 }
@@ -196,7 +200,7 @@ std::string StudentRepository::nextMatricule(int year) {
     auto lock = db_.lockGuard();
     const std::string prefix = "STU-" + std::to_string(year) + "-";
     auto stmt = db_.prepare(
-        "SELECT matricule FROM students WHERE matricule LIKE ? "
+        std::string("SELECT matricule FROM students WHERE matricule LIKE ? ") + tenant::filter("") + 
         "ORDER BY matricule DESC LIMIT 1;");
     stmt.bindAll(prefix + "%");
 

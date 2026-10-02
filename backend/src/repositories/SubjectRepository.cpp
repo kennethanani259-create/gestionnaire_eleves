@@ -1,6 +1,7 @@
 #include "repositories/SubjectRepository.hpp"
 
 #include "core/Error.hpp"
+#include "core/Tenant.hpp"
 
 namespace app {
 namespace {
@@ -53,21 +54,22 @@ void SubjectRepository::update(const Subject& value) {
 
 bool SubjectRepository::remove(long long id) {
     auto lock = db_.lockGuard();
-    auto stmt = db_.prepare("DELETE FROM subjects WHERE id=?;");
+    auto stmt = db_.prepare(std::string("DELETE FROM subjects WHERE id=? ") +
+                            tenant::filterVia("subjects.class_id", "classes") + ";");
     stmt.bindAll(id);
     stmt.execute();
     return db_.changes() > 0;
 }
 
 std::optional<Subject> SubjectRepository::findById(long long id) {
-    auto stmt = db_.prepare(std::string(kSelect) + "WHERE sb.id = ?;");
+    auto stmt = db_.prepare(std::string(kSelect) + "WHERE sb.id = ? " + tenant::filterVia("sb.class_id", "classes") + ";");
     stmt.bindAll(id);
     if (!stmt.step()) return std::nullopt;
     return mapRow(stmt);
 }
 
 std::vector<Subject> SubjectRepository::findByClass(long long classId) {
-    auto stmt = db_.prepare(std::string(kSelect) + "WHERE sb.class_id = ? ORDER BY sb.name;");
+    auto stmt = db_.prepare(std::string(kSelect) + "WHERE sb.class_id = ? " + tenant::filterVia("sb.class_id", "classes") + "ORDER BY sb.name;");
     stmt.bindAll(classId);
     std::vector<Subject> results;
     while (stmt.step()) results.push_back(mapRow(stmt));
@@ -75,14 +77,15 @@ std::vector<Subject> SubjectRepository::findByClass(long long classId) {
 }
 
 std::vector<Subject> SubjectRepository::findAll() {
-    auto stmt = db_.prepare(std::string(kSelect) + "ORDER BY c.name, sb.name;");
+    auto stmt = db_.prepare(std::string(kSelect) + "WHERE 1=1 " + tenant::filterVia("sb.class_id", "classes") + "ORDER BY c.name, sb.name;");
     std::vector<Subject> results;
     while (stmt.step()) results.push_back(mapRow(stmt));
     return results;
 }
 
 bool SubjectRepository::exists(long long id) {
-    auto stmt = db_.prepare("SELECT 1 FROM subjects WHERE id=? LIMIT 1;");
+    auto stmt = db_.prepare(std::string("SELECT 1 FROM subjects WHERE id=? ") +
+                            tenant::filterVia("subjects.class_id", "classes") + "LIMIT 1;");
     stmt.bindAll(id);
     return stmt.step();
 }

@@ -92,7 +92,9 @@
     role: function () { var u = this.user(); return u ? u.role : null; },
     /** Hiérarchie ADMIN > TEACHER > VIEWER. */
     can: function (minRole) {
-      var levels = { VIEWER: 1, TEACHER: 2, ADMIN: 3 };
+      // PARENT n'est pas un sur-ensemble de VIEWER : il ne voit que ses
+      // enfants, jamais l'établissement entier.
+      var levels = { PARENT: 0, VIEWER: 1, TEACHER: 2, ADMIN: 3 };
       return (levels[this.role()] || 0) >= (levels[minRole] || 99);
     },
 
@@ -182,15 +184,22 @@
     },
 
     /* ----------------------------- Auth ----------------------------- */
-    login: function (username, password) {
+    login: function (username, password, role) {
       var self = this;
-      return this.post('/api/auth/login', { username: username, password: password })
+      var payload = { username: username, password: password };
+      // Rôle facultatif : le serveur refuse si le compte ne le porte pas.
+      if (role) payload.role = role;
+      return this.post('/api/auth/login', payload)
         .then(function (data) {
           self.setSession(data.token, data.user);
           return data.user;
         });
     },
     me: function () { return this.get('/api/auth/me'); },
+    /** Établissement correspondant à un matricule (route publique). */
+    schoolByCode: function (code) { return this.get('/api/auth/schools/' + encodeURIComponent(code)); },
+    /** Établissement de l'utilisateur connecté. */
+    school: function () { return this.get('/api/school'); },
     /** Politique d'inscription en vigueur (route publique). */
     registrationPolicy: function () { return this.get('/api/auth/registration'); },
     /** Demande de compte depuis la page publique. */

@@ -6,6 +6,7 @@
   'use strict';
 
   var ROUTES = {
+    children:   { title: 'Mes enfants', sub: 'Bulletins et presences des eleves rattaches a votre compte', page: 'children', anyRole: true },
     dashboard:  { title: "Aujourd'hui", sub: "L'etat du registre en un coup d'oeil", page: 'dashboard' },
     students:   { title: 'Eleves', sub: 'Inscriptions, coordonnees et affectations', page: 'students' },
     student:    { title: 'Fiche eleve', page: 'students', view: 'detail', nav: 'students' },
@@ -16,7 +17,7 @@
     results:    { title: 'Resultats', sub: 'Moyennes ponderees et classement par classe', page: 'results' },
     reports:    { title: 'Bulletins et rapports', sub: 'Documents PDF, exports et imports', page: 'reports' },
     users:      { title: 'Comptes', sub: 'Acces et roles', page: 'users', role: 'ADMIN' },
-    settings:   { title: 'Reglages', sub: 'Profil, annee scolaire et etat du service', page: 'settings' }
+    settings:   { title: 'Reglages', sub: 'Profil, annee scolaire et etat du service', page: 'settings', anyRole: true }
   };
 
   var App = {
@@ -66,8 +67,23 @@
         el.hidden = !Api.can('ADMIN');
       });
 
+      // Un parent n'a accès qu'à ses enfants et à son profil : on retire du
+      // rail tout ce qui concerne l'établissement, plutôt que de laisser
+      // l'utilisateur buter sur des refus.
+      var parent = (user.role === 'PARENT');
+      document.getElementById('nav-children').hidden = !parent;
+      document.querySelectorAll('.rail__item[data-nav]').forEach(function (el) {
+        var nav = el.dataset.nav;
+        if (nav === 'children') return;
+        if (parent && nav !== 'settings') el.hidden = true;
+      });
+      document.querySelectorAll('.rail__group').forEach(function (el) {
+        if (parent) el.hidden = true;
+      });
+
       App.cache = {};
-      if (!location.hash || location.hash === '#') location.hash = '#/dashboard';
+      var home = parent ? '#/children' : '#/dashboard';
+      if (!location.hash || location.hash === '#') location.hash = home;
       else App.route();
     },
 
@@ -80,11 +96,12 @@
 
     /* ----------------------------- Routage ----------------------------- */
     parseHash: function () {
-      var raw = (location.hash || '#/dashboard').replace(/^#\/?/, '');
+      var fallback = (Api.role() === 'PARENT') ? 'children' : 'dashboard';
+      var raw = (location.hash || '#/' + fallback).replace(/^#\/?/, '');
       var parts = raw.split('/').filter(function (p) { return p !== ''; });
-      var name = parts[0] || 'dashboard';
+      var name = parts[0] || fallback;
       if (name === 'students' && parts[1]) return { name: 'student', params: { id: parts[1] } };
-      return { name: ROUTES[name] ? name : 'dashboard', params: { id: parts[1] } };
+      return { name: ROUTES[name] ? name : fallback, params: { id: parts[1] } };
     },
 
     route: function () {
@@ -92,9 +109,10 @@
       var target = App.parseHash();
       var route = ROUTES[target.name];
 
-      if (route.role && !Api.can(route.role)) {
+      var required = route.role || (route.anyRole ? null : 'VIEWER');
+      if (required && !Api.can(required)) {
         UI.error("Vous n'avez pas les droits nécessaires pour cette page.");
-        location.hash = '#/dashboard';
+        location.hash = (Api.role() === 'PARENT') ? '#/children' : '#/dashboard';
         return;
       }
 
@@ -184,7 +202,8 @@
       button.textContent = 'Ouverture…';
 
       Api.login(document.getElementById('login-username').value.trim(),
-                document.getElementById('login-password').value)
+                document.getElementById('login-password').value,
+                document.getElementById('login-role').value)
         .then(function (user) {
           UI.success('Bienvenue ' + (user.full_name || user.username) + ' !');
           location.hash = '#/dashboard';
@@ -203,7 +222,9 @@
   }
 
   /* --------------------------- Demande de compte --------------------------- */
-  var REGISTER_FIELDS = ['full_name', 'username', 'email', 'password', 'password_confirm'];
+  var REGISTER_FIELDS = ['full_name', 'username', 'email', 'password', 'password_confirm',
+                         'school_code', 'school_name'];
+  var registerMode = 'join';   // 'join' = rejoindre une ecole, 'create' = la fonder
 
   function clearRegisterErrors() {
     REGISTER_FIELDS.forEach(function (name) {
@@ -255,6 +276,44 @@
     document.getElementById('tab-login').onclick = function () { selectEntryTab('login'); };
     document.getElementById('tab-register').onclick = function () { selectEntryTab('register'); };
 
+    function selectMode(mode) {
+      registerMode = mode;
+      var joining = mode === 'join';
+      document.getElementById('register-join').hidden = !joining;
+      document.getElementById('register-create').hidden = joining;
+      [['mode-join', joining], ['mode-create', !joining]].forEach(function (pair) {
+        var btn = document.getElementById(pair[0]);
+        btn.classList.toggle('is-active', pair[1]);
+        btn.setAttribute('aria-checked', pair[1] ? 'true' : 'false');
+      });
+      document.getElementById('register-submit').textContent =
+        joining ? 'Rejoindre l\'établissement' : 'Créer mon école';
+    }
+    document.getElementById('mode-join').onclick = function () { selectMode('join'); };
+    document.getElementById('mode-create').onclick = function () { selectMode('create'); };
+
+    // Confirmation du matricule saisi : on affiche le nom de l'école trouvée
+    // plutôt que de laisser l'utilisateur découvrir son erreur après coup.
+    var codeInput = document.getElementById('register-code');
+    var codeHint = document.getElementById('register-code-found');
+    var checkCode = UI.debounce(function () {
+      var code = codeInput.value.trim().toUpperCase();
+      if (code.length < 4) {
+        codeHint.textContent = "Communiqué par l'administration de l'école.";
+        codeHint.classList.remove('strong');
+        return;
+      }
+      Api.schoolByCode(code).then(function (school) {
+        codeHint.textContent = 'Établissement : ' + school.name +
+          (school.city ? ' — ' + school.city : '');
+        codeHint.classList.add('strong');
+      }).catch(function () {
+        codeHint.textContent = 'Aucun établissement ne porte ce matricule.';
+        codeHint.classList.remove('strong');
+      });
+    }, 350);
+    codeInput.addEventListener('input', checkCode);
+
     var form = document.getElementById('register-form');
     form.addEventListener('submit', function (event) {
       event.preventDefault();
@@ -267,6 +326,13 @@
         email: document.getElementById('register-email').value.trim(),
         password: document.getElementById('register-password').value
       };
+      if (registerMode === 'create') {
+        payload.school_name = document.getElementById('register-school').value.trim();
+        payload.school_city = document.getElementById('register-city').value.trim();
+      } else {
+        payload.school_code = document.getElementById('register-code').value.trim().toUpperCase();
+        payload.role = document.getElementById('register-role').value;
+      }
       var confirm = document.getElementById('register-confirm').value;
 
       // Seule vérification purement locale : la confirmation. Tout le reste est
@@ -290,6 +356,7 @@
             UI.success('Compte créé. Vous pouvez vous connecter.');
             selectEntryTab('login');
             document.getElementById('login-username').value = payload.username;
+            document.getElementById('login-role').value = data.user ? data.user.role : '';
             document.getElementById('login-password').focus();
           }
         })

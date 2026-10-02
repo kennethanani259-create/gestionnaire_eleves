@@ -3,6 +3,7 @@
 #include <sstream>
 
 #include "core/Error.hpp"
+#include "core/Tenant.hpp"
 
 namespace app {
 namespace {
@@ -81,14 +82,15 @@ void AttendanceRepository::update(const Attendance& value) {
 
 bool AttendanceRepository::remove(long long id) {
     auto lock = db_.lockGuard();
-    auto stmt = db_.prepare("DELETE FROM attendance WHERE id=?;");
+    auto stmt = db_.prepare(std::string("DELETE FROM attendance WHERE id=? ") +
+                            tenant::filterVia("attendance.student_id", "students") + ";");
     stmt.bindAll(id);
     stmt.execute();
     return db_.changes() > 0;
 }
 
 std::optional<Attendance> AttendanceRepository::findById(long long id) {
-    auto stmt = db_.prepare(std::string(kSelect) + "WHERE a.id=?;");
+    auto stmt = db_.prepare(std::string(kSelect) + "WHERE a.id=? " + tenant::filterVia("a.student_id", "students") + ";");
     stmt.bindAll(id);
     if (!stmt.step()) return std::nullopt;
     return mapRow(stmt);
@@ -96,7 +98,7 @@ std::optional<Attendance> AttendanceRepository::findById(long long id) {
 
 std::vector<Attendance> AttendanceRepository::find(const AttendanceFilter& filter) {
     std::ostringstream sql;
-    sql << kSelect << "WHERE 1=1 ";
+    sql << kSelect << "WHERE 1=1 " << tenant::filterVia("a.student_id", "students");
     if (filter.studentId.has_value()) sql << "AND a.student_id = ? ";
     if (filter.classId.has_value()) sql << "AND st.class_id = ? ";
     if (filter.status.has_value()) sql << "AND a.status = ? ";
@@ -124,7 +126,7 @@ std::vector<Attendance> AttendanceRepository::find(const AttendanceFilter& filte
 
 AttendanceSummary AttendanceRepository::summaryForStudent(long long studentId) {
     auto stmt = db_.prepare(std::string(kSummarySelect) +
-                            "WHERE a.student_id = ? GROUP BY a.student_id;");
+                            "WHERE a.student_id = ? " + tenant::filterVia("a.student_id", "students") + "GROUP BY a.student_id;");
     stmt.bindAll(studentId);
     if (!stmt.step()) {
         AttendanceSummary empty;
@@ -137,7 +139,7 @@ AttendanceSummary AttendanceRepository::summaryForStudent(long long studentId) {
 std::vector<AttendanceSummary> AttendanceRepository::summaryForClass(long long classId) {
     auto stmt = db_.prepare(std::string(kSummarySelect) +
                             "JOIN students st ON st.id = a.student_id "
-                            "WHERE st.class_id = ? GROUP BY a.student_id;");
+                            "WHERE st.class_id = ? " + tenant::filterVia("a.student_id", "students") + "GROUP BY a.student_id;");
     stmt.bindAll(classId);
     std::vector<AttendanceSummary> rows;
     while (stmt.step()) rows.push_back(mapSummary(stmt));
@@ -149,7 +151,7 @@ std::vector<std::pair<std::string, long long>> AttendanceRepository::monthlyAbse
     std::ostringstream sql;
     sql << "SELECT substr(a.att_date, 1, 7) AS month, COUNT(*) "
            "FROM attendance a JOIN students st ON st.id = a.student_id "
-           "WHERE a.status IN ('ABSENT','EXCUSED') ";
+           "WHERE a.status IN ('ABSENT','EXCUSED') " << tenant::filterVia("a.student_id", "students");
     if (classId.has_value()) sql << "AND st.class_id = ? ";
     sql << "GROUP BY month ORDER BY month;";
 

@@ -150,6 +150,19 @@ a:hover { text-decoration-color: var(--ochre); }
 }
 .entry__tab:hover { color: var(--ink); }
 .entry__tab.is-active { color: var(--ink); border-bottom-color: var(--ochre); }
+
+/* Choix du parcours d'inscription : deux cases contigues, pas des pilules. */
+.entry__modes { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: var(--s4); }
+.entry__mode {
+  appearance: none; cursor: pointer; font: inherit; font-size: .82rem;
+  padding: var(--s2) var(--s3); background: var(--paper-sunk);
+  border: 1px solid var(--rule); color: var(--ink-2);
+}
+.entry__mode:first-child { border-right: 0; border-radius: var(--r-sm) 0 0 var(--r-sm); }
+.entry__mode:last-child  { border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.entry__mode.is-active {
+  background: var(--board); border-color: var(--board); color: #fff;
+}
 .entry__title { font-size: 1.9rem; }
 .entry__hint { color: var(--ink-2); margin: var(--s1) 0 var(--s5); }
 .entry__note {
@@ -466,6 +479,21 @@ select { appearance: none; background-image:
 .record { display: grid; gap: var(--s4) var(--s6); grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
 .record__k { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); }
 .record__v { margin-top: 1px; }
+/* Matricule d'etablissement : lisible et selectionnable d'un geste. */
+.code-strong {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 1.05rem; letter-spacing: .14em; font-weight: 600;
+  background: var(--ochre-soft); padding: 2px 8px; border-radius: var(--r-sm);
+  user-select: all;
+}
+.field__hint.strong { color: var(--green); font-weight: 600; }
+
+/* Liste des enfants rattaches a un compte parent. */
+.linklist { list-style: none; margin: 0 0 var(--s4); padding: 0; }
+.linklist li {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
+  padding: var(--s2) 0; border-bottom: 1px solid var(--rule-soft);
+}
 
 .chart { width: 100%; }
 .chart svg { display: block; width: 100%; height: auto; }

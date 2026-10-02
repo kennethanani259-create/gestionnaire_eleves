@@ -15,7 +15,7 @@ enum class Gender { Male, Female };
 enum class StudentStatus { Active, Inactive, Transferred, Expelled };
 enum class EvalType { Homework, Quiz, Exam, Lab, Project, Continuous };
 enum class AttendanceStatus { Present, Absent, Excused, Late };
-enum class UserRole { Admin, Teacher, Viewer };
+enum class UserRole { Admin, Teacher, Parent, Viewer };
 
 std::string toString(Gender value);
 std::string toString(StudentStatus value);
@@ -37,6 +37,12 @@ std::string label(AttendanceStatus value);
 std::string label(UserRole value);
 
 /// Niveau de privilege croissant : Viewer(0) < Teacher(1) < Admin(2).
+/// Parent vaut -1 : ce role n'est PAS un sur-ensemble de Viewer, il ne donne
+/// acces qu'aux enfants rattaches et ne doit donc jamais satisfaire une route
+/// ouverte a la consultation de tout l'etablissement.
 int privilegeLevel(UserRole role);
+
+/// true si le role ne voit que ses propres enfants.
+bool isParentRole(UserRole role);
 
 }  // namespace app

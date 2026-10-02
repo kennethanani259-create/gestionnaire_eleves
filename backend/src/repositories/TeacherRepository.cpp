@@ -1,6 +1,7 @@
 #include "repositories/TeacherRepository.hpp"
 
 #include "core/Error.hpp"
+#include "core/Tenant.hpp"
 
 namespace app {
 namespace {
@@ -28,10 +29,10 @@ Teacher mapRow(const Statement& stmt) {
 long long TeacherRepository::create(const Teacher& value) {
     auto lock = db_.lockGuard();
     auto stmt = db_.prepare(
-        "INSERT INTO teachers (user_id, first_name, last_name, email, phone, speciality) "
-        "VALUES (?,?,?,?,?,?);");
+        "INSERT INTO teachers (user_id, first_name, last_name, email, phone, speciality, "
+        "                      school_id) VALUES (?,?,?,?,?,?,?);");
     stmt.bindAll(value.userId, value.firstName, value.lastName, value.email, value.phone,
-                 value.speciality);
+                 value.speciality, tenant::requireCurrentSchool());
     stmt.execute();
     return db_.lastInsertId();
 }
@@ -40,7 +41,7 @@ void TeacherRepository::update(const Teacher& value) {
     auto lock = db_.lockGuard();
     auto stmt = db_.prepare(
         "UPDATE teachers SET user_id=?, first_name=?, last_name=?, email=?, phone=?, "
-        " speciality=?, updated_at=datetime('now') WHERE id=?;");
+        " speciality=?, updated_at=datetime('now') WHERE id=? " + tenant::filter("") + ";");
     stmt.bindAll(value.userId, value.firstName, value.lastName, value.email, value.phone,
                  value.speciality, value.id);
     stmt.execute();
@@ -49,28 +50,29 @@ void TeacherRepository::update(const Teacher& value) {
 
 bool TeacherRepository::remove(long long id) {
     auto lock = db_.lockGuard();
-    auto stmt = db_.prepare("DELETE FROM teachers WHERE id=?;");
+    auto stmt = db_.prepare(std::string("DELETE FROM teachers WHERE id=? ") + tenant::filter("") + ";");
     stmt.bindAll(id);
     stmt.execute();
     return db_.changes() > 0;
 }
 
 std::optional<Teacher> TeacherRepository::findById(long long id) {
-    auto stmt = db_.prepare(std::string(kSelect) + "WHERE id = ?;");
+    auto stmt = db_.prepare(std::string(kSelect) + "WHERE id = ? " + tenant::filter("") + ";");
     stmt.bindAll(id);
     if (!stmt.step()) return std::nullopt;
     return mapRow(stmt);
 }
 
 std::vector<Teacher> TeacherRepository::findAll() {
-    auto stmt = db_.prepare(std::string(kSelect) + "ORDER BY last_name, first_name;");
+    auto stmt = db_.prepare(std::string(kSelect) + "WHERE 1=1 " + tenant::filter("") + "ORDER BY last_name, first_name;");
     std::vector<Teacher> results;
     while (stmt.step()) results.push_back(mapRow(stmt));
     return results;
 }
 
 bool TeacherRepository::exists(long long id) {
-    auto stmt = db_.prepare("SELECT 1 FROM teachers WHERE id=? LIMIT 1;");
+    auto stmt = db_.prepare(std::string("SELECT 1 FROM teachers WHERE id=? ") + tenant::filter("") +
+                            "LIMIT 1;");
     stmt.bindAll(id);
     return stmt.step();
 }

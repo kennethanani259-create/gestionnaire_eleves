@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Registre — gestion des élèves</title>
   <meta name="description" content="Tenue du registre scolaire : élèves, notes, présences, bulletins.">
-  <link rel="stylesheet" href="/css/styles.css?v=5">
+  <link rel="stylesheet" href="/css/styles.css?v=6">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='3' fill='%231d2e27'/><path d='M9 7h11a4 4 0 0 1 4 4v14H13a4 4 0 0 0-4 4z' fill='none' stroke='%23c8882f' stroke-width='2'/></svg>">
 </head>
 <body>
@@ -92,6 +92,18 @@
                autocomplete="current-password" required>
       </div>
 
+      <div class="field">
+        <label for="login-role">Je me connecte en tant que</label>
+        <select id="login-role" name="role">
+          <option value="">— peu importe, utiliser mon rôle —</option>
+          <option value="ADMIN">Direction (administrateur)</option>
+          <option value="TEACHER">Enseignant</option>
+          <option value="PARENT">Parent</option>
+          <option value="VIEWER">Consultation</option>
+        </select>
+        <p class="field__hint">Le serveur vérifie que votre compte porte bien ce rôle.</p>
+      </div>
+
       <p id="login-error" class="notice notice--error" role="alert" hidden></p>
 
       <button type="submit" class="btn btn--primary btn--full" id="login-submit">
@@ -107,10 +119,56 @@
 
     <form class="entry__form" id="register-form" novalidate hidden
           role="tabpanel" aria-labelledby="tab-register">
-      <h1 class="entry__title">Demander un compte</h1>
+      <h1 class="entry__title">S'inscrire</h1>
       <p class="entry__hint" id="register-policy">
-        La demande est transmise à la direction, qui l'ouvre en consultation.
+        Rejoignez un établissement avec son matricule, ou créez le vôtre.
       </p>
+
+      <div class="entry__modes" role="radiogroup" aria-label="Type d'inscription">
+        <button type="button" class="entry__mode is-active" id="mode-join"
+                role="radio" aria-checked="true">Rejoindre une école</button>
+        <button type="button" class="entry__mode" id="mode-create"
+                role="radio" aria-checked="false">Créer mon école</button>
+      </div>
+
+      <div id="register-join">
+        <div class="field">
+          <label for="register-code">Matricule de l'établissement</label>
+          <input id="register-code" name="school_code" type="text" autocapitalize="characters"
+                 spellcheck="false" maxlength="16">
+          <p class="field__hint" id="register-code-found">Communiqué par l'administration de l'école.</p>
+          <p class="field__error" id="register-error-school_code" hidden></p>
+        </div>
+
+        <div class="field">
+          <label for="register-role">Mon rôle dans l'établissement</label>
+          <select id="register-role" name="role">
+            <option value="PARENT">Parent d'élève</option>
+            <option value="TEACHER">Enseignant</option>
+            <option value="VIEWER">Consultation</option>
+          </select>
+          <p class="field__hint">La direction reste seule à pouvoir accorder le rôle d'administrateur.</p>
+        </div>
+      </div>
+
+      <div id="register-create" hidden>
+        <div class="field">
+          <label for="register-school">Nom de l'établissement</label>
+          <input id="register-school" name="school_name" type="text">
+          <p class="field__error" id="register-error-school_name" hidden></p>
+        </div>
+
+        <div class="field">
+          <label for="register-city">Ville <span class="muted">(facultatif)</span></label>
+          <input id="register-city" name="school_city" type="text">
+        </div>
+
+        <p class="notice notice--info">
+          Vous serez l'administrateur de cette école : accès total à vos classes,
+          vos élèves et vos comptes, et à eux seuls. Un matricule vous sera remis
+          pour y inscrire vos enseignants et les parents.
+        </p>
+      </div>
 
       <div class="field">
         <label for="register-fullname">Nom et prénom</label>
@@ -153,12 +211,11 @@
       <p id="register-done" class="notice notice--ok" role="status" hidden></p>
 
       <button type="submit" class="btn btn--primary btn--full" id="register-submit">
-        Envoyer la demande
+        Créer mon compte
       </button>
 
       <p class="entry__note">
-        Un compte ouvert par cette voie donne un accès en <strong>consultation</strong>.
-        Les droits de saisie et d'administration sont attribués par la direction.
+        Un parent ne voit que les élèves qui lui sont rattachés par l'établissement.
       </p>
     </form>
   </main>
@@ -178,6 +235,8 @@
     </div>
 
     <nav class="rail__nav" aria-label="Sections">
+      <a href="#/children" class="rail__item" id="nav-children" data-nav="children" hidden><svg class="icon"><use href="#i-students"/></svg>Mes enfants</a>
+
       <p class="rail__group">Suivi quotidien</p>
       <a href="#/dashboard"  class="rail__item" data-nav="dashboard"><svg class="icon"><use href="#i-board"/></svg>Aujourd'hui</a>
       <a href="#/students"   class="rail__item" data-nav="students"><svg class="icon"><use href="#i-students"/></svg>Élèves</a>
@@ -240,19 +299,20 @@
 
 <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 
-<script src="/js/api.js?v=5"></script>
-<script src="/js/ui.js?v=5"></script>
-<script src="/js/charts.js?v=5"></script>
-<script src="/js/pages/dashboard.js?v=5"></script>
-<script src="/js/pages/students.js?v=5"></script>
-<script src="/js/pages/classes.js?v=5"></script>
-<script src="/js/pages/subjects.js?v=5"></script>
-<script src="/js/pages/grades.js?v=5"></script>
-<script src="/js/pages/attendance.js?v=5"></script>
-<script src="/js/pages/results.js?v=5"></script>
-<script src="/js/pages/reports.js?v=5"></script>
-<script src="/js/pages/users.js?v=5"></script>
-<script src="/js/pages/settings.js?v=5"></script>
-<script src="/js/app.js?v=5"></script>
+<script src="/js/api.js?v=6"></script>
+<script src="/js/ui.js?v=6"></script>
+<script src="/js/charts.js?v=6"></script>
+<script src="/js/pages/dashboard.js?v=6"></script>
+<script src="/js/pages/students.js?v=6"></script>
+<script src="/js/pages/classes.js?v=6"></script>
+<script src="/js/pages/subjects.js?v=6"></script>
+<script src="/js/pages/grades.js?v=6"></script>
+<script src="/js/pages/attendance.js?v=6"></script>
+<script src="/js/pages/results.js?v=6"></script>
+<script src="/js/pages/reports.js?v=6"></script>
+<script src="/js/pages/users.js?v=6"></script>
+<script src="/js/pages/children.js?v=6"></script>
+<script src="/js/pages/settings.js?v=6"></script>
+<script src="/js/app.js?v=6"></script>
 </body>
 </html>

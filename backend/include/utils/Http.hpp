@@ -44,4 +44,7 @@ std::optional<long long> nullableId(const nlohmann::json& body, const std::strin
 int optionalInt(const nlohmann::json& body, const std::string& key, int fallback);
 bool optionalBool(const nlohmann::json& body, const std::string& key, bool fallback);
 
+/// Chaine facultative : nullopt si absente ou vide (et non une chaine vide).
+std::optional<std::string> optionalStringOpt(const nlohmann::json& body, const std::string& key);
+
 }  // namespace app::http

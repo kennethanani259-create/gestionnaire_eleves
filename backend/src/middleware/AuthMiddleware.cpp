@@ -2,6 +2,7 @@
 
 #include "core/Error.hpp"
 #include "core/Logger.hpp"
+#include "core/Tenant.hpp"
 
 namespace app::middleware {
 namespace {
@@ -13,16 +14,27 @@ UserRole requiredRole(api::Access access) {
     switch (access) {
         case api::Access::Admin: return UserRole::Admin;
         case api::Access::Teacher: return UserRole::Teacher;
-        case api::Access::Viewer:
-        case api::Access::Public: return UserRole::Viewer;
+        case api::Access::Viewer: return UserRole::Viewer;
+        // Parent est le plus bas niveau : exiger ce role revient a n'exiger
+        // qu'une authentification valide.
+        case api::Access::Authenticated:
+        case api::Access::Public: return UserRole::Parent;
     }
     return UserRole::Viewer;
 }
 
 }  // namespace
 
-void CurrentUser::set(const User& user) { t_currentUser = user; }
-void CurrentUser::clear() { t_currentUser.reset(); }
+void CurrentUser::set(const User& user) {
+    t_currentUser = user;
+    // La portee d'etablissement decoule du compte authentifie : aucune route
+    // n'a a la poser elle-meme, donc aucune ne peut l'oublier.
+    tenant::setCurrentSchool(user.schoolId);
+}
+void CurrentUser::clear() {
+    t_currentUser.reset();
+    tenant::setCurrentSchool(std::nullopt);
+}
 std::optional<User> CurrentUser::peek() { return t_currentUser; }
 
 const User& CurrentUser::require() {

@@ -9,6 +9,7 @@
 
 #include "core/Config.hpp"
 #include "utils/Validator.hpp"
+#include "repositories/SchoolRepository.hpp"
 #include "repositories/UserRepository.hpp"
 #include "utils/Jwt.hpp"
 
@@ -19,6 +20,7 @@ namespace app {
 struct RegistrationResult {
     User user;
     bool pendingApproval = false;  ///< true : le compte attend la validation d'un administrateur
+    std::optional<School> school;  ///< etablissement rejoint ou cree
     nlohmann::json toJson() const;
 };
 
@@ -31,15 +33,23 @@ struct AuthResult {
 
 class AuthService {
 public:
-    AuthService(IUserRepository& users, std::string jwtSecret, int jwtTtlMinutes,
-                SelfRegistration selfRegistration = SelfRegistration::Approval)
+    AuthService(IUserRepository& users, ISchoolRepository& schools, std::string jwtSecret,
+                int jwtTtlMinutes,
+                SelfRegistration selfRegistration = SelfRegistration::Open)
         : users_(users),
+          schools_(schools),
           secret_(std::move(jwtSecret)),
           ttlMinutes_(jwtTtlMinutes),
           selfRegistration_(selfRegistration) {}
 
-    /// Authentifie par identifiant (nom d'utilisateur ou e-mail) et mot de passe.
-    AuthResult login(const std::string& identifier, const std::string& password);
+    /**
+     * Authentifie par identifiant (nom d'utilisateur ou e-mail) et mot de passe.
+     * @param expectedRole si renseigne, la connexion echoue lorsque le compte
+     *        ne porte pas exactement ce role. Le role n'est jamais accorde par
+     *        ce parametre : il ne sert qu'a verifier le choix fait a l'ecran.
+     */
+    AuthResult login(const std::string& identifier, const std::string& password,
+                     std::optional<UserRole> expectedRole = std::nullopt);
     /// Verifie un jeton et retourne l'utilisateur correspondant (compte actif requis).
     User authenticate(const std::string& token);
 
@@ -49,8 +59,32 @@ public:
     /// Inscription demandee par un visiteur. Le role est TOUJOURS impose a
     /// Consultation : une page publique ne peut pas accorder de droits d'ecriture.
     /// Selon la politique, le compte est actif ou en attente de validation.
-    RegistrationResult selfRegister(const std::string& username, const std::string& email,
-                                    const std::string& password, const std::string& fullName);
+    /**
+     * Cree un etablissement et son premier compte, administrateur de plein
+     * droit sur cette ecole uniquement. Toujours actif : sans cela, personne
+     * ne pourrait valider le compte.
+     */
+    RegistrationResult registerSchool(const std::string& schoolName,
+                                      const std::optional<std::string>& city,
+                                      const std::string& username, const std::string& email,
+                                      const std::string& password, const std::string& fullName);
+
+    /**
+     * Rejoint un etablissement existant via son matricule.
+     * @param role role demande, restreint a Teacher/Parent/Viewer : le role
+     *        d'administrateur ne s'obtient jamais avec un matricule.
+     */
+    RegistrationResult joinSchool(const std::string& code, UserRole role,
+                                  const std::string& username, const std::string& email,
+                                  const std::string& password, const std::string& fullName);
+
+    /// Etablissement d'un compte, ou nullopt s'il n'est rattache a aucun.
+    std::optional<School> schoolOf(const User& user);
+    /// Recherche publique par matricule (inscription).
+    std::optional<School> schoolByCode(const std::string& code);
+    /// Nouveau matricule pour l'etablissement de l'administrateur courant :
+    /// invalide l'ancien, utile s'il a circule trop largement.
+    School regenerateSchoolCode(const User& admin);
 
     User createUser(const std::string& username, const std::string& email,
                     const std::string& password, const std::string& fullName, UserRole role);
@@ -79,6 +113,7 @@ private:
     static void validatePasswordStrength(Validator& validator, const std::string& password);
 
     IUserRepository& users_;
+    ISchoolRepository& schools_;
     std::string secret_;
     int ttlMinutes_;
     SelfRegistration selfRegistration_;

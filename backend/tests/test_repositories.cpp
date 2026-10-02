@@ -358,6 +358,9 @@ TEST_CASE("UserRepository : CRUD et recherche par identifiants") {
     user.passwordHash = "pbkdf2_sha256$120000$sel$hash";
     user.fullName = "Mariam Kone";
     user.role = UserRole::Teacher;
+    // Tout compte appartient a un etablissement : sans rattachement, il reste
+    // invisible aux lectures, qui sont toutes cloisonnees.
+    user.schoolId = app::tenant::currentSchool();
 
     const auto id = f.users.create(user);
     CHECK(f.users.count() == 1);

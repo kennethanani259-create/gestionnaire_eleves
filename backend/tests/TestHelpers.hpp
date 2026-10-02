@@ -17,6 +17,8 @@
 #include "repositories/SchoolYearRepository.hpp"
 #include "repositories/StudentRepository.hpp"
 #include "repositories/SubjectRepository.hpp"
+#include "core/Tenant.hpp"
+#include "repositories/SchoolRepository.hpp"
 #include "repositories/UserRepository.hpp"
 
 namespace testing {
@@ -33,11 +35,27 @@ inline std::string migrationsDir() {
     throw std::runtime_error("Repertoire de migrations introuvable depuis les tests");
 }
 
-/// Base en memoire, schema applique : chaque test part d'un etat propre.
+/// Cree un etablissement et pose la portee courante dessus. Les depots
+/// exigent une portee : sans elle, aucune ecriture n'est possible, ce qui est
+/// exactement le comportement attendu en production.
+inline long long seedSchool(app::Database& db, const std::string& name = "Ecole de test",
+                            const std::string& code = "TEST01") {
+    app::SchoolRepository schools(db);
+    app::School school;
+    school.code = code;
+    school.name = name;
+    const long long id = schools.create(school);
+    app::tenant::setCurrentSchool(id);
+    return id;
+}
+
+/// Base en memoire, schema applique, un etablissement courant : chaque test
+/// part d'un etat propre et deja cloisonne.
 inline std::unique_ptr<app::Database> makeTestDatabase() {
     auto db = std::make_unique<app::Database>(":memory:");
     app::Migrator migrator(*db, migrationsDir());
     migrator.migrate();
+    seedSchool(*db);
     return db;
 }
 

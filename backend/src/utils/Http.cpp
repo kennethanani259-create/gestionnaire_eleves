@@ -161,4 +161,11 @@ bool optionalBool(const nlohmann::json& body, const std::string& key, bool fallb
     return fallback;
 }
 
+std::optional<std::string> optionalStringOpt(const nlohmann::json& body,
+                                             const std::string& key) {
+    const std::string value = optionalString(body, key);
+    if (value.empty()) return std::nullopt;
+    return value;
+}
+
 }  // namespace app::http

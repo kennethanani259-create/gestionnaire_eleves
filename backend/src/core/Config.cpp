@@ -109,7 +109,7 @@ Config Config::fromEnvironment() {
     cfg.threadPoolSize = envInt("APP_THREAD_POOL_SIZE", cfg.threadPoolSize);
     cfg.logLevel = logLevelFromString(envString("APP_LOG_LEVEL", "INFO"));
     cfg.logFile = envString("APP_LOG_FILE", "");
-    cfg.selfRegistration = selfRegistrationFromString(envString("APP_SELF_REGISTRATION", "approval"));
+    cfg.selfRegistration = selfRegistrationFromString(envString("APP_SELF_REGISTRATION", "open"));
 
     cfg.jwtSecret = envString("APP_JWT_SECRET", "");
     if (cfg.jwtSecret.empty()) {
