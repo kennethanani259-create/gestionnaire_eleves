@@ -1,0 +1,17 @@
+services:
+  gestionnaire:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: gestionnaire-eleves:latest
+    container_name: gestionnaire-eleves
+    ports:
+      - "8080:8080"
+    environment:
+      # A REMPLACER par un secret robuste en production.
+      APP_JWT_SECRET: "changez-ce-secret-en-production-svp-123456"
+      APP_JWT_TTL_MINUTES: "480"
+      APP_LOG_LEVEL: "INFO"
+    volumes:
+      - ../data:/app/data
+    restart: unless-stopped
