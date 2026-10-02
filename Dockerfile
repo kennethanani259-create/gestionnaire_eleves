@@ -9,7 +9,7 @@ WORKDIR /src
 COPY backend/ backend/
 
 RUN cmake -S backend -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release \
- && cmake --build /build -j"1 \
+ && cmake --build /build -j1 \
  && /build/gestionnaire_tests
 
 # ---------- Etape 2 : image d'execution ----------
