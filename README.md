@@ -22,6 +22,21 @@ vendorisées dans `backend/third_party`).
 # 3. Ouvrir http://localhost:8080
 ```
 
+### Environnement de démonstration en une commande
+
+Sur une machine vierge, `dev_up.sh` installe l'outillage manquant, compile si
+nécessaire et crée une base peuplée (24 élèves, 3 classes, 576 notes) :
+
+```bash
+./scripts/dev_up.sh   # prépare tout ; idempotent, ne lance pas le serveur
+./scripts/run.sh      # démarre
+```
+
+Il fixe alors le mot de passe administrateur à `Admin123!` et crée les comptes
+`prof` et `lecteur` (`Demo1234!`). **À usage de développement et de démonstration
+uniquement** : n'exécutez jamais ce script sur une base de production, et ne
+réutilisez pas ces mots de passe.
+
 Au **premier démarrage**, un compte administrateur est créé automatiquement et
 son mot de passe aléatoire est affiché dans les logs :
 
